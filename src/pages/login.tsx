@@ -1,21 +1,44 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { GraduationCap, ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { GraduationCap, ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Helmet } from '@dr.pogodin/react-helmet';
 import { C, CA } from '@/lib/colors';
 
-export default function MockLogin() {
+export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) { setError('Please enter your email and password.'); return; }
+    setError('');
     setLoading(true);
-    setTimeout(() => navigate('/dashboard'), 700);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Login failed'); return; }
+      // Store user in sessionStorage (or localStorage if remember)
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem('studyhub_user', JSON.stringify(data.user));
+      // Redirect based on role
+      const role = data.user.role;
+      if (role === 'admin') navigate('/admin');
+      else if (role === 'lecturer') navigate('/lecturer');
+      else navigate('/dashboard');
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,30 +75,29 @@ export default function MockLogin() {
             className="w-full max-w-md rounded-2xl p-8 shadow-sm"
             style={{ background: C.paperRaised, border: `1px solid ${C.border}` }}
           >
-            <h1
-              className="text-3xl font-bold mb-2"
-              style={{ fontFamily: 'var(--font-heading)', color: C.ink }}
-            >
+            <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--font-heading)', color: C.ink }}>
               Welcome <span className="highlighter-underline">back</span>
             </h1>
-            <p className="text-sm mb-8" style={{ color: C.inkSoft }}>
+            <p className="text-sm mb-6" style={{ color: C.inkSoft }}>
               Sign in to continue your learning journey.
             </p>
 
-            {/* Demo note */}
-            <div
-              className="rounded-xl px-4 py-3 mb-6 text-sm"
-              style={{ background: CA.teal10, color: C.teal }}
-            >
-              Demo: any email & password will sign you in as <strong>Alex Johnson (Student)</strong>
+            {/* Demo credentials hint */}
+            <div className="rounded-xl px-4 py-3 mb-6 text-xs" style={{ background: CA.teal10, color: C.teal }}>
+              <strong>Demo accounts:</strong> student@studyhub.ai / student123 &nbsp;·&nbsp; lecturer@studyhub.ai / lecturer123 &nbsp;·&nbsp; admin@studyhub.ai / admin123
             </div>
+
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4 text-sm" style={{ background: CA.coral10, color: C.coral }}>
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: C.ink }}>
-                  Email
-                </label>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: C.ink }}>Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: C.inkSoft }} />
                   <input
@@ -83,21 +105,16 @@ export default function MockLogin() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@university.edu"
+                    required
                     className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm focus:outline-none"
-                    style={{
-                      background: C.paper,
-                      border: `1px solid ${C.border}`,
-                      color: C.ink,
-                    }}
+                    style={{ background: C.paper, border: `1px solid ${C.border}`, color: C.ink }}
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: C.ink }}>
-                  Password
-                </label>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: C.ink }}>Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: C.inkSoft }} />
                   <input
@@ -105,12 +122,9 @@ export default function MockLogin() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
+                    required
                     className="w-full pl-10 pr-10 py-2.5 rounded-lg text-sm focus:outline-none"
-                    style={{
-                      background: C.paper,
-                      border: `1px solid ${C.border}`,
-                      color: C.ink,
-                    }}
+                    style={{ background: C.paper, border: `1px solid ${C.border}`, color: C.ink }}
                   />
                   <button
                     type="button"
@@ -123,45 +137,27 @@ export default function MockLogin() {
                 </div>
               </div>
 
-              {/* Remember + Forgot */}
+              {/* Remember */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: C.inkSoft }}>
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="rounded"
-                  />
+                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="rounded" />
                   Remember me
                 </label>
-                <button type="button" className="text-sm" style={{ color: C.teal }}>
-                  Forgot password?
-                </button>
               </div>
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all"
                 style={{ background: C.teal, opacity: loading ? 0.8 : 1 }}
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Signing in…
-                  </>
-                ) : (
-                  'Sign in'
-                )}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : 'Sign in'}
               </button>
             </form>
 
             <p className="text-sm text-center mt-6" style={{ color: C.inkSoft }}>
               Don't have an account?{' '}
-              <Link to="/register" className="font-medium" style={{ color: C.teal }}>
-                Create one
-              </Link>
+              <Link to="/register" className="font-medium" style={{ color: C.teal }}>Create one</Link>
             </p>
           </div>
         </div>

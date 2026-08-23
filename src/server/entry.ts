@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 // <api-imports>
 import healthGet from "./api/health/GET";
+import studyhubSqlite from "./api/studyhub-sqlite";
 // </api-imports>
 import { seoRoutes } from "../lib/seo-routes";
 import {
@@ -86,6 +87,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // <api-registrations>
 app.get("/api/health", healthGet);
+app.use("/api", studyhubSqlite);   // SQLite-backed API
 // </api-registrations>
 
 // Error middleware must be registered AFTER the routes it protects; Express

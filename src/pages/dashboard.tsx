@@ -1,16 +1,21 @@
 import { Link } from 'react-router';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   Brain, Layers, BookMarked, BarChart2, Flame, Clock, CheckCircle2, AlertCircle,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockUser, mockCourses, mockAnalytics, mockAssignments } from '@/lib/mockData';
 import { C, CA, courseColors } from '@/lib/colors';
 
 export default function StudentDashboard() {
-  const upcomingDeadlines = mockAssignments.slice(0, 3);
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: analytics = mockAnalytics } = useQuery({ queryKey: ['analytics'], queryFn: api.getAnalytics });
+  const { data: assignments = mockAssignments } = useQuery({ queryKey: ['assignments'], queryFn: () => api.getAssignments() });
+  const upcomingDeadlines = assignments.slice(0, 3);
 
   return (
     <>
@@ -27,8 +32,7 @@ export default function StudentDashboard() {
               Good morning, <span className="highlighter-underline">{mockUser.name.split(' ')[0]}</span> 👋
             </h1>
             <p className="text-sm" style={{ color: C.inkSoft }}>
-              {mockUser.program} · Year {mockUser.year}
-            </p>
+              {mockUser.program} · Year {mockUser.year}            </p>
           </div>
           <div
             className="flex items-center gap-2 px-4 py-2 rounded-xl self-start"
@@ -44,10 +48,10 @@ export default function StudentDashboard() {
         {/* Stats row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Overall Grade', value: `${mockAnalytics.overallGrade}%`, color: C.teal, icon: BarChart2 },
-            { label: 'Study Hours', value: `${mockAnalytics.studyHours}h`, color: C.sage, icon: Clock },
-            { label: 'Quiz Average', value: `${mockAnalytics.quizAverage}%`, color: C.highlighter, icon: Layers },
-            { label: 'Assignments Done', value: `${mockAnalytics.assignmentsDone}/${mockAnalytics.assignmentsTotal}`, color: C.sage, icon: CheckCircle2 },
+            { label: 'Overall Grade', value: `${analytics.overallGrade}%`, color: C.teal, icon: BarChart2 },
+            { label: 'Study Hours', value: `${analytics.studyHours}h`, color: C.sage, icon: Clock },
+            { label: 'Quiz Average', value: `${analytics.quizAverage}%`, color: C.highlighter, icon: Layers },
+            { label: 'Assignments Done', value: `${analytics.assignmentsDone}/${analytics.assignmentsTotal}`, color: C.sage, icon: CheckCircle2 },
           ].map((s) => (
             <div
               key={s.label}
@@ -81,7 +85,7 @@ export default function StudentDashboard() {
               Weekly Progress
             </h2>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={mockAnalytics.weeklyProgress}>
+              <AreaChart data={analytics.weeklyProgress}>
                 <defs>
                   <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--sh-teal))" stopOpacity={0.3} />
@@ -149,7 +153,7 @@ export default function StudentDashboard() {
             My Courses
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockCourses.map((course) => (
+            {courses.map((course) => (
               <Link
                 key={course.id}
                 to={`/courses/${course.id}`}

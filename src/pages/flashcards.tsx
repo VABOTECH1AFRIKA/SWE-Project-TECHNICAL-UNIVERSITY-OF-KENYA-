@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import { BookMarked, ArrowLeft, ArrowRight, RotateCcw, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockFlashcards, mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
@@ -12,9 +14,12 @@ export default function Flashcards() {
   const [learning, setLearning] = useState<Set<string>>(new Set());
   const [filterCourse, setFilterCourse] = useState<string>('all');
 
-  const decks = mockCourses.map((c) => ({
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: flashcards = mockFlashcards } = useQuery({ queryKey: ['flashcards'], queryFn: () => api.getFlashcards() });
+
+  const decks = courses.map((c) => ({
     course: c,
-    cards: mockFlashcards.filter((f) => f.deck === c.code),
+    cards: flashcards.filter((f) => f.deck === c.code),
   })).filter((d) => d.cards.length > 0);
 
   const filteredDecks = filterCourse === 'all' ? decks : decks.filter((d) => d.course.code === filterCourse);

@@ -1,20 +1,23 @@
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import {
   LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { BarChart2, Brain, Clock, CheckCircle2, Flame, BookOpen } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockAnalytics, mockUser } from '@/lib/mockData';
 import { C, CA } from '@/lib/colors';
 
 export default function ProgressAnalytics() {
+  const { data: analytics = mockAnalytics } = useQuery({ queryKey: ['analytics'], queryFn: api.getAnalytics });
   const stats = [
-    { label: 'Overall Grade', value: `${mockAnalytics.overallGrade}%`, icon: BarChart2, color: C.teal },
-    { label: 'Quiz Average', value: `${mockAnalytics.quizAverage}%`, icon: Brain, color: C.highlighter },
-    { label: 'Study Hours', value: `${mockAnalytics.studyHours}h`, icon: Clock, color: C.sage },
-    { label: 'Assignments Done', value: `${mockAnalytics.assignmentsDone}/${mockAnalytics.assignmentsTotal}`, icon: CheckCircle2, color: C.sage },
+    { label: 'Overall Grade', value: `${analytics.overallGrade}%`, icon: BarChart2, color: C.teal },
+    { label: 'Quiz Average', value: `${analytics.quizAverage}%`, icon: Brain, color: C.highlighter },
+    { label: 'Study Hours', value: `${analytics.studyHours}h`, icon: Clock, color: C.sage },
+    { label: 'Assignments Done', value: `${analytics.assignmentsDone}/${analytics.assignmentsTotal}`, icon: CheckCircle2, color: C.sage },
     { label: 'Day Streak 🔥', value: `${mockUser.streak}`, icon: Flame, color: C.coral },
-    { label: 'Courses Active', value: `${mockAnalytics.coursesActive}`, icon: BookOpen, color: C.teal },
+    { label: 'Courses Active', value: `${analytics.coursesActive}`, icon: BookOpen, color: C.teal },
   ];
 
   const statusColor = (s: string) =>
@@ -69,7 +72,7 @@ export default function ProgressAnalytics() {
               Weekly Score Trend
             </h2>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={mockAnalytics.weeklyProgress}>
+              <LineChart data={analytics.weeklyProgress}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--sh-border))" />
                 <XAxis dataKey="day" tick={{ fontSize: 12, fill: 'hsl(var(--sh-ink-soft))' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--sh-ink-soft))' }} axisLine={false} tickLine={false} domain={[50, 100]} />
@@ -88,7 +91,7 @@ export default function ProgressAnalytics() {
               Recent Quiz Scores
             </h2>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={mockAnalytics.recentQuizScores}>
+              <BarChart data={analytics.recentQuizScores}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--sh-border))" />
                 <XAxis dataKey="quiz" tick={{ fontSize: 10, fill: 'hsl(var(--sh-ink-soft))' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--sh-ink-soft))' }} axisLine={false} tickLine={false} domain={[0, 100]} />
@@ -109,7 +112,7 @@ export default function ProgressAnalytics() {
               Strengths & Areas to Improve
             </h2>
             <div className="space-y-4">
-              {mockAnalytics.subjectStrengths.map((s) => (
+              {analytics.subjectStrengths.map((s) => (
                 <div key={s.subject}>
                   <div className="flex items-center justify-between mb-1.5">
                     <p className="text-sm font-medium" style={{ color: C.ink }}>{s.subject}</p>
@@ -145,7 +148,7 @@ export default function ProgressAnalytics() {
               Competency Radar
             </h2>
             <ResponsiveContainer width="100%" height={220}>
-              <RadarChart data={mockAnalytics.radarData}>
+              <RadarChart data={analytics.radarData}>
                 <PolarGrid stroke="hsl(var(--sh-border))" />
                 <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: 'hsl(var(--sh-ink-soft))' }} />
                 <Radar

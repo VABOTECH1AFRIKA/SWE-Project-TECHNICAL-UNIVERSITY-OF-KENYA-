@@ -318,5 +318,3 @@ Built with amazing open-source tools:
 ---
 
 **Happy coding! 🎉**
-
-# SWE-Project-TECHNICAL-UNIVERSITY-OF-KENYA-

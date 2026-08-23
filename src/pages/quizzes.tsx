@@ -1,33 +1,28 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import { Trophy, CheckCircle, XCircle, ChevronRight, RotateCcw, ArrowLeft, Sparkles } from 'lucide-react';
-import { mockQuizzes } from '@/lib/mockData';
+import { api, type Quiz, type QuizQuestion } from '@/lib/api';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
 type Screen = 'list' | 'quiz' | 'results';
 
-interface QuizQuestion {
-  id: string;
-  question: string;
-  options: string[];
-  correct: number;
-  explanation: string;
-}
-
 export default function Quizzes() {
   const [screen, setScreen] = useState<Screen>('list');
-  const [activeQuiz, setActiveQuiz] = useState<typeof mockQuizzes[0] | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [score, setScore] = useState(0);
+
+  const { data: quizzes } = useQuery<Quiz[]>({ queryKey: ['quizzes'], queryFn: () => api.getQuizzes() });
 
   const difficultyColor = (d: string) =>
     d === 'Easy' ? C.sage : d === 'Medium' ? C.highlighter : C.coral;
   const difficultyBg = (d: string) =>
     d === 'Easy' ? CA.sage10 : d === 'Medium' ? CA.highlighter15 : CA.coral10;
 
-  const startQuiz = (quiz: typeof mockQuizzes[0]) => {
+  const startQuiz = (quiz: Quiz) => {
     setActiveQuiz(quiz);
     setCurrentQ(0);
     setSelected(null);
@@ -42,8 +37,8 @@ export default function Quizzes() {
   };
 
   const handleNext = () => {
-    if (selected === null || !activeQuiz?.questions_data) return;
-    const questions = activeQuiz.questions_data as QuizQuestion[];
+    if (selected === null || !activeQuiz?.questions?.length) return;
+    const questions = activeQuiz.questions as unknown as QuizQuestion[];
     const correct = questions[currentQ].correct;
     const newAnswers = [...answers, selected];
     const newScore = selected === correct ? score + 1 : score;
@@ -69,8 +64,8 @@ export default function Quizzes() {
     setScore(0);
   };
 
-  if (screen === 'quiz' && activeQuiz?.questions_data) {
-    const questions = activeQuiz.questions_data as QuizQuestion[];
+  if (screen === 'quiz' && activeQuiz?.questions?.length) {
+    const questions = activeQuiz.questions as unknown as QuizQuestion[];
     const q = questions[currentQ];
     const isLast = currentQ === questions.length - 1;
     const progress = ((currentQ) / questions.length) * 100;
@@ -192,7 +187,7 @@ export default function Quizzes() {
   }
 
   if (screen === 'results' && activeQuiz) {
-    const questions = (activeQuiz.questions_data as QuizQuestion[]) || [];
+    const questions = (activeQuiz.questions as unknown as QuizQuestion[]) || [];
     const pct = Math.round((score / questions.length) * 100);
     const passed = pct >= 70;
 
@@ -258,7 +253,7 @@ export default function Quizzes() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mockQuizzes.map((quiz) => (
+          {((quizzes as Quiz[]) ?? []).map((quiz: Quiz) => (
             <div
               key={quiz.id}
               className="rounded-xl p-5 transition-all hover:shadow-md"
@@ -311,19 +306,19 @@ export default function Quizzes() {
                   </div>
                 )}
                 <button
-                  onClick={() => quiz.questions_data ? startQuiz(quiz) : undefined}
-                  disabled={!quiz.questions_data}
+                  onClick={() => quiz.questions?.length ? startQuiz(quiz) : undefined}
+                  disabled={!quiz.questions?.length}
                   className="ml-auto px-4 py-2 rounded-lg text-sm font-semibold transition-all"
                   style={{
-                    background: quiz.questions_data ? C.teal : C.paper,
-                    color: quiz.questions_data ? 'white' : C.inkSoft,
-                    border: quiz.questions_data ? 'none' : `1px solid ${C.border}`,
-                    cursor: quiz.questions_data ? 'pointer' : 'not-allowed',
-                    opacity: quiz.questions_data ? 1 : 0.6,
+                    background: quiz.questions?.length ? C.teal : C.paper,
+                    color: quiz.questions?.length ? 'white' : C.inkSoft,
+                    border: quiz.questions?.length ? 'none' : `1px solid ${C.border}`,
+                    cursor: quiz.questions?.length ? 'pointer' : 'not-allowed',
+                    opacity: quiz.questions?.length ? 1 : 0.6,
                   }}
                 >
                   {quiz.bestScore !== null ? 'Retake' : 'Start Quiz'}
-                  {!quiz.questions_data && ' (Demo)'}
+                  {!quiz.questions?.length && ' (Demo)'}
                 </button>
               </div>
             </div>

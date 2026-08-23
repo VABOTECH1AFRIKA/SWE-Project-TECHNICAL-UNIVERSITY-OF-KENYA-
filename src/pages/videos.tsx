@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import { Play, Youtube, Info } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockYoutubeVideos, mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
 export default function VideoRecommendations() {
   const [filterCourse, setFilterCourse] = useState<string>('all');
 
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: videos = mockYoutubeVideos } = useQuery({ queryKey: ['videos'], queryFn: () => api.getVideos() });
+
   const filtered = filterCourse === 'all'
-    ? mockYoutubeVideos
-    : mockYoutubeVideos.filter((v) => v.course === filterCourse);
+    ? videos
+    : videos.filter((v) => v.course === filterCourse);
 
   return (
     <>
@@ -47,7 +52,7 @@ export default function VideoRecommendations() {
           >
             All Courses
           </button>
-          {mockCourses.map((c) => (
+          {courses.map((c) => (
             <button
               key={c.code}
               onClick={() => setFilterCourse(c.code)}

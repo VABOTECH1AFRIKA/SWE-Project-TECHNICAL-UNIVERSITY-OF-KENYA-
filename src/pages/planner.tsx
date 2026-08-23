@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, CheckCircle2, Circle, BookOpen, Pencil, Play, Layers, X } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockStudyPlan, mockCourses } from '@/lib/mockData';
 import { C, CA } from '@/lib/colors';
 
@@ -27,31 +29,43 @@ const typeConfig: Record<TaskType, { icon: React.ElementType; color: string; bg:
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function StudyPlanner() {
-  const [tasks, setTasks] = useState<Task[]>(mockStudyPlan as Task[]);
+  const qc = useQueryClient();
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: fetchedTasks = mockStudyPlan as Task[] } = useQuery({ queryKey: ['study-plan'], queryFn: api.getStudyPlan });
+  const [localTasks, setLocalTasks] = useState<Task[] | null>(null);
+  const tasks: Task[] = localTasks ?? (fetchedTasks as Task[]);
+
+  const toggleMutation = useMutation({
+    mutationFn: (id: string) => api.toggleTask(id),
+    onSuccess: () => { setLocalTasks(null); qc.invalidateQueries({ queryKey: ['study-plan'] }); },
+    onMutate: (id) => {
+      setLocalTasks((prev) => (prev ?? (fetchedTasks as Task[])).map((t) => t.id === id ? { ...t, completed: !t.completed } : t));
+    },
+  });
+
   const [showModal, setShowModal] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
-    course: mockCourses[0].code,
+    course: courses[0]?.code ?? 'CS301',
     type: 'study' as TaskType,
     time: '09:00',
     duration: 60,
     dueDate: new Date().toISOString().split('T')[0],
   });
 
-  const toggleTask = (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
+  const toggleTask = (id: string) => toggleMutation.mutate(id);
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!newTask.title.trim()) return;
-    const task: Task = {
-      id: `sp${Date.now()}`,
-      ...newTask,
-      completed: false,
-    };
-    setTasks((prev) => [...prev, task]);
+    try {
+      const created = await api.createTask(newTask);
+      setLocalTasks((prev) => [...(prev ?? (fetchedTasks as Task[])), created as Task]);
+    } catch {
+      const task: Task = { id: `sp${Date.now()}`, ...newTask, completed: false };
+      setLocalTasks((prev) => [...(prev ?? (fetchedTasks as Task[])), task]);
+    }
     setShowModal(false);
-    setNewTask({ title: '', course: mockCourses[0].code, type: 'study', time: '09:00', duration: 60, dueDate: new Date().toISOString().split('T')[0] });
+    setNewTask({ title: '', course: courses[0]?.code ?? 'CS301', type: 'study', time: '09:00', duration: 60, dueDate: new Date().toISOString().split('T')[0] });
   };
 
   const completed = tasks.filter((t) => t.completed).length;
@@ -247,7 +261,7 @@ export default function StudyPlanner() {
                       className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
                       style={{ background: C.paper, border: `1px solid ${C.border}`, color: C.ink }}
                     >
-                      {mockCourses.map((c) => (
+                      {courses.map((c) => (
                         <option key={c.code} value={c.code}>{c.code}</option>
                       ))}
                     </select>

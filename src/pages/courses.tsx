@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery } from '@tanstack/react-query';
 import { FileText, Download, Eye, CheckCircle2, Clock, AlertCircle, BookOpen } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockCourses, mockNotes, mockAssignments } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
@@ -18,13 +20,17 @@ export default function CourseMaterials() {
   const [activeTab, setActiveTab] = useState<Tab>('notes');
   const [search, setSearch] = useState('');
 
-  const filteredNotes = mockNotes.filter(
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: notes = mockNotes } = useQuery({ queryKey: ['notes'], queryFn: () => api.getNotes() });
+  const { data: assignments = mockAssignments } = useQuery({ queryKey: ['assignments'], queryFn: () => api.getAssignments() });
+
+  const filteredNotes = notes.filter(
     (n) =>
       (activeCourse === 'all' || n.course === activeCourse) &&
       n.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredAssignments = mockAssignments.filter(
+  const filteredAssignments = assignments.filter(
     (a) => activeCourse === 'all' || a.course === activeCourse
   );
 
@@ -59,7 +65,7 @@ export default function CourseMaterials() {
           >
             All Courses
           </button>
-          {mockCourses.map((c) => (
+          {courses.map((c) => (
             <button
               key={c.code}
               onClick={() => setActiveCourse(c.code)}

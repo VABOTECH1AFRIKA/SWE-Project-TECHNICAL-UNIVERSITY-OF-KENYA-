@@ -2,7 +2,9 @@ import { admin } from 'virtual:content';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Users, BookOpen, Settings, Search, MoreHorizontal, Brain } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockAdminStats, mockAdminUsers, mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
@@ -17,10 +19,17 @@ const roleConfig: Record<string, { color: string; bg: string }> = {
 export default function AdminDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [userSearch, setUserSearch] = useState('');
-  const [userStatuses, setUserStatuses] = useState<Record<string, string>>(
-    Object.fromEntries(mockAdminUsers.map((u) => [u.id, u.status]))
-  );
+
+  const { data: adminStats = mockAdminStats } = useQuery({ queryKey: ['admin-stats'], queryFn: api.getAdminStats });
+  const { data: adminUsers = mockAdminUsers } = useQuery({ queryKey: ['admin-users', userSearch], queryFn: () => api.getAdminUsers(userSearch || undefined) });
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => api.updateUserStatus(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
 
   const activeTab: TabId =
     location.pathname === '/admin/users' ? 'users'
@@ -28,26 +37,24 @@ export default function AdminDashboard() {
     : location.pathname === '/admin/settings' ? 'settings'
     : 'users';
 
-  const toggleStatus = (id: string) => {
-    setUserStatuses((prev) => ({
-      ...prev,
-      [id]: prev[id] === 'active' ? 'suspended' : 'active',
-    }));
+  const toggleStatus = (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    statusMutation.mutate({ id, status: newStatus });
   };
 
-  const filteredUsers = mockAdminUsers.filter(
+  const filteredUsers = adminUsers.filter(
     (u) =>
       u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.email.toLowerCase().includes(userSearch.toLowerCase())
   );
 
   const stats = [
-    { label: 'Total Students', value: mockAdminStats.totalStudents, color: C.teal },
-    { label: 'Lecturers', value: mockAdminStats.lecturers, color: C.sage },
-    { label: 'Courses', value: mockAdminStats.courses, color: C.coral },
-    { label: 'Active Users', value: mockAdminStats.activeUsers, color: C.teal },
-    { label: 'Notes Uploaded', value: mockAdminStats.notesUploaded, color: C.highlighter },
-    { label: 'Quizzes Taken', value: mockAdminStats.quizzesTaken.toLocaleString(), color: C.sage },
+    { label: 'Total Students', value: adminStats.totalStudents, color: C.teal },
+    { label: 'Lecturers', value: adminStats.lecturers, color: C.sage },
+    { label: 'Courses', value: adminStats.courses, color: C.coral },
+    { label: 'Active Users', value: adminStats.activeUsers, color: C.teal },
+    { label: 'Notes Uploaded', value: adminStats.notesUploaded, color: C.highlighter },
+    { label: 'Quizzes Taken', value: adminStats.quizzesTaken.toLocaleString(), color: C.sage },
   ];
 
   return (
@@ -144,7 +151,7 @@ export default function AdminDashboard() {
               </div>
               {filteredUsers.map((user, i) => {
                 const rc = roleConfig[user.role] || roleConfig.student;
-                const status = userStatuses[user.id];
+                const status = user.status;
                 return (
                   <div
                     key={user.id}
@@ -186,7 +193,7 @@ export default function AdminDashboard() {
                     </span>
                     {/* Actions */}
                     <button
-                      onClick={() => toggleStatus(user.id)}
+                      onClick={() => toggleStatus(user.id, status)}
                       className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all w-fit"
                       style={{
                         background: status === 'active' ? CA.coral10 : CA.sage10,
@@ -208,13 +215,13 @@ export default function AdminDashboard() {
             className="rounded-xl overflow-hidden"
             style={{ border: `1px solid ${C.border}` }}
           >
-            {mockCourses.map((course, i) => (
+            {courses.map((course, i) => (
               <div
                 key={course.id}
                 className="flex items-center gap-4 px-5 py-4 transition-all hover:bg-background"
                 style={{
                   background: C.paperRaised,
-                  borderBottom: i < mockCourses.length - 1 ? `1px solid ${C.border}` : 'none',
+                  borderBottom: i < courses.length - 1 ? `1px solid ${C.border}` : 'none',
                 }}
               >
                 <div

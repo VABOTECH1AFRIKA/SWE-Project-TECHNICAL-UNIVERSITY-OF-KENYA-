@@ -1,24 +1,34 @@
 import { useState } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare, Eye, CheckCircle, ArrowLeft, Send, Plus, X } from 'lucide-react';
+import { api } from '@/lib/api';
 import { mockForumThreads, mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
 
 type View = 'list' | 'detail';
 
 export default function DiscussionForum() {
+  const qc = useQueryClient();
   const [view, setView] = useState<View>('list');
-  const [activeThread, setActiveThread] = useState<typeof mockForumThreads[0] | null>(null);
+  const [activeThread, setActiveThread] = useState<(typeof mockForumThreads)[0] | null>(null);
   const [filterCourse, setFilterCourse] = useState<string>('all');
   const [replyText, setReplyText] = useState('');
   const [showNewPost, setShowNewPost] = useState(false);
   const [newPost, setNewPost] = useState({ title: '', details: '', tags: '' });
 
-  const filtered = filterCourse === 'all'
-    ? mockForumThreads
-    : mockForumThreads.filter((t) => t.course === filterCourse);
+  const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: threads = mockForumThreads } = useQuery({ queryKey: ['forum', filterCourse], queryFn: () => api.getThreads(filterCourse === 'all' ? undefined : filterCourse) });
 
-  const openThread = (thread: typeof mockForumThreads[0]) => {
+  const replyMutation = useMutation({
+    mutationFn: ({ threadId, content }: { threadId: string; content: string }) =>
+      api.addReply(threadId, { author: 'Alex Johnson', authorRole: 'student', content }),
+    onSuccess: () => { setReplyText(''); qc.invalidateQueries({ queryKey: ['forum'] }); },
+  });
+
+  const filtered = threads;
+
+  const openThread = (thread: (typeof mockForumThreads)[0]) => {
     setActiveThread(thread);
     setView('detail');
   };
@@ -149,8 +159,8 @@ export default function DiscussionForum() {
               style={{ background: C.paper, border: `1px solid ${C.border}`, color: C.ink }}
             />
             <button
-              onClick={() => setReplyText('')}
-              disabled={!replyText.trim()}
+              onClick={() => activeThread && replyMutation.mutate({ threadId: activeThread.id, content: replyText })}
+              disabled={!replyText.trim() || replyMutation.isPending}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all"
               style={{ background: C.teal, opacity: replyText.trim() ? 1 : 0.5 }}
             >
@@ -200,7 +210,7 @@ export default function DiscussionForum() {
           >
             All
           </button>
-          {mockCourses.map((c) => (
+          {courses.map((c) => (
             <button
               key={c.code}
               onClick={() => setFilterCourse(c.code)}
