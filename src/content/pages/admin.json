@@ -1,0 +1,19 @@
+{
+  "tabs": [
+    {
+      "id": "users",
+      "label": "Manage Users",
+      "path": "/admin/users"
+    },
+    {
+      "id": "courses",
+      "label": "Manage Courses",
+      "path": "/admin/courses"
+    },
+    {
+      "id": "settings",
+      "label": "System Settings",
+      "path": "/admin/settings"
+    }
+  ]
+}

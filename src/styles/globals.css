@@ -1,0 +1,307 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── StudyHub AI Custom Palette ── */
+    --sh-paper: 50 25% 95%;
+    --sh-paper-raised: 0 0% 100%;
+    --sh-ink: 220 27% 15%;
+    --sh-ink-soft: 217 11% 40%;
+    --sh-highlighter: 42 100% 65%;
+    --sh-teal: 177 56% 28%;
+    --sh-coral: 11 77% 57%;
+    --sh-sage: 136 22% 54%;
+    --sh-border: 48 21% 86%;
+    --sh-border-strong: 45 17% 74%;
+    --sh-highlighter-text: 42 100% 27%;
+
+    /* Core Colors */
+    --background: 50 25% 95%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 27% 15%;
+    --popover: 50 25% 95%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 177 56% 28%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 11% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 48 21% 86%;
+    --muted-foreground: 217 11% 40%;
+    --accent: 42 100% 65%;
+    --accent-foreground: 0 0% 34%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+    --border: 48 21% 86%;
+    --input: 48 21% 86%;
+    --ring: 177 56% 28%;
+
+    /* Extended Colors */
+    --chart-1: 177 56% 58%;
+    --chart-2: 177 56% 43%;
+    --chart-3: 177 56% 28%;
+    --chart-4: 177 57% 13%;
+    --chart-5: 0 0% 0%;
+
+    /* Sidebar Colors */
+    --sidebar: 48 21% 86%;
+    --sidebar-foreground: 0 0% 4%;
+    --sidebar-primary: 177 56% 28%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 42 100% 65%;
+    --sidebar-accent-foreground: 0 0% 34%;
+    --sidebar-border: 48 21% 86%;
+    --sidebar-ring: 177 56% 28%;
+
+    /* Typography */
+    --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-heading: "Fraunces", Georgia, serif;
+    --font-serif: ui-serif, Georgia, "Times New Roman", serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Monaco, Consolas, monospace;
+
+    /* Border Radius */
+    --radius: 0.5rem;
+    --radius-button: calc(var(--radius) - 2px);
+
+    /* Shadows */
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
+    --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
+    --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
+    --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading) !important;
+  }
+}
+
+/* Shared long-form type scale (RUBICON-554). Single source of truth for
+   page titles and rich markdown content; anchored to the site heading range so
+   blog posts match the rest of the customer's site. */
+@layer components {
+  .page-title {
+    font-size: clamp(1.875rem, 2vw + 1rem, 2.25rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: normal;
+    color: hsl(var(--foreground));
+  }
+
+  .rich-text {
+    color: hsl(var(--muted-foreground));
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+  /* Defensive: a stray body H1 renders one step below .page-title and is
+     visually distinct from the real page title above it. */
+  .rich-text h1 {
+    font-size: clamp(1.5rem, 1.5vw + 1rem, 1.875rem);
+    font-weight: 700;
+    line-height: 1.3;
+    color: hsl(var(--foreground));
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+  }
+  .rich-text h2 {
+    font-size: clamp(1.5rem, 1.5vw + 1rem, 1.875rem);
+    font-weight: 700;
+    line-height: 1.3;
+    color: hsl(var(--foreground));
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+  }
+  .rich-text h3 {
+    font-size: clamp(1.25rem, 1vw + 0.9rem, 1.5rem);
+    font-weight: 700;
+    color: hsl(var(--foreground));
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+  }
+  .rich-text h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .rich-text p {
+    margin-bottom: 1.25rem;
+  }
+  .rich-text a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+  .rich-text ul,
+  .rich-text ol {
+    margin: 1.25rem 0;
+    padding-left: 1.5rem;
+  }
+  .rich-text ul { list-style: disc; }
+  .rich-text ol { list-style: decimal; }
+  .rich-text li { margin-bottom: 0.5rem; }
+  .rich-text blockquote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1rem;
+    font-style: italic;
+    margin: 1.5rem 0;
+    color: hsl(var(--foreground));
+  }
+  .rich-text code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: hsl(var(--muted));
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.25rem;
+  }
+  .rich-text pre {
+    background: hsl(var(--muted));
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+  }
+  .rich-text pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .rich-text img {
+    border-radius: 0.5rem;
+    margin: 1.5rem 0;
+    max-width: 100%;
+    height: auto;
+  }
+  .rich-text table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+  }
+  .rich-text th,
+  .rich-text td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .animate-in {
+    animation-duration: 0.2s;
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: fadeIn;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* Unless told otherwise, keep it for smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── StudyHub AI Signature CSS ── */
+
+/* Highlighter underline — the app's signature visual element */
+.highlighter-underline {
+  background: linear-gradient(to right, #FFC94A88 0%, #FFC94Acc 40%, #FFC94A99 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 45%;
+  background-position: 0 85%;
+  padding: 0 2px;
+}
+
+/* Sidebar active indicator — highlighter-colored vertical bar */
+.sidebar-active {
+  position: relative;
+}
+.sidebar-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: #FFC94A;
+  border-radius: 0 2px 2px 0;
+}
+
+/* Global transitions */
+*, *::before, *::after {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F6F5F0;
+}
+::-webkit-scrollbar-thumb {
+  background: #C9C4B2;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5B6472;
+}
+
+/* 3D flip card */
+.flip-card-inner {
+  transition: transform 0.5s;
+  transform-style: preserve-3d;
+}
+.flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+.flip-card-front,
+.flip-card-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back {
+  transform: rotateY(180deg);
+}
