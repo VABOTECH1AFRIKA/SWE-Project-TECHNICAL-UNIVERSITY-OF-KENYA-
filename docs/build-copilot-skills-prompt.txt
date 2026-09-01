@@ -1,0 +1,134 @@
+# GitHub Copilot Agent — Build Personal Skills Library
+
+Read and execute:
+`C:\Users\maxwe\\.copilot\skills\skills-build-plan.md`
+
+IMPORTANT: The authoritative plan is the file above. Do not merely summarize it. Implement it.
+
+## Target
+
+Build and validate the personal Agent Skills library under:
+`C:\Users\maxwe\\.copilot\skills`
+
+## Before changing anything
+
+1. Inventory the existing skill directories.
+2. Read the existing `SKILL.md` files.
+3. Identify responsibility overlaps and conflicts.
+4. Preserve existing skills unless a safe, justified improvement is required.
+5. Verify the installed VS Code Agent Skills format before generating files.
+
+## Implementation rules
+
+- Use one directory per skill.
+- Every skill directory must contain `SKILL.md`.
+- The `name` frontmatter value must exactly match the directory name.
+- Use lowercase kebab-case skill names.
+- Keep each skill narrowly specialized.
+- Do not create duplicate cross-cutting skills already covered by the existing library.
+- Do not invent framework APIs, configuration fields, commands, or behaviors.
+- Detect actual project/framework versions before applying version-sensitive guidance.
+- Require evidence before making repository-specific claims.
+- Never expose, print, commit, or hard-code secrets.
+- Do not weaken authentication, authorization, RLS, or other security controls.
+- Do not perform destructive database actions without explicit safeguards.
+- Use related skills rather than copying their entire instructions.
+- Include practical validation steps in every skill.
+
+## Required skill structure
+
+Each `SKILL.md` should contain:
+
+- YAML frontmatter
+- Purpose
+- When to use
+- When not to use
+- Required workflow
+- Skill-specific rules
+- Common failure modes
+- Validation checklist
+- Related skills
+
+## Phase execution
+
+Implement the plan sequentially:
+
+0. Standards
+1. TypeScript
+2. React
+3. Next.js
+4. Node.js
+5. APIs
+6. Supabase
+7. PostgreSQL
+8. Vue/Nuxt
+9. Vite
+10. Testing
+11. Web Security
+12. Authentication/Authorization
+13. Web Performance
+14. Integrations
+15. Deployment
+16. Optional advanced skills only when justified
+
+After each phase:
+
+1. Validate frontmatter.
+2. Validate directory/name consistency.
+3. Audit overlap.
+4. Audit security.
+5. Audit references.
+6. Confirm trigger descriptions are useful.
+7. Fix defects before moving to the next phase.
+
+## Required final artifacts
+
+Create:
+
+`C:\Users\maxwe\.copilot\skills\SKILLS-INVENTORY.md`
+`C:\Users\maxwe\.copilot\skills\SKILLS-VALIDATION-REPORT.md`
+`C:\Users\maxwe\.copilot\skills\SKILLS-DEPENDENCY-MAP.md`
+
+### SKILLS-INVENTORY.md
+Include:
+- skill name
+- category/phase
+- purpose
+- trigger conditions
+- related skills
+- invocation behavior
+
+### SKILLS-VALIDATION-REPORT.md
+Include:
+- existing skills inspected
+- new skills created
+- duplicate/overlap findings
+- frontmatter findings
+- invalid naming findings
+- unsafe-instruction findings
+- missing-reference findings
+- unresolved issues
+- final status
+
+### SKILLS-DEPENDENCY-MAP.md
+Document recommended skill compositions for:
+- React + Supabase
+- Next.js + Supabase
+- Node + PostgreSQL
+- REST API + auth
+- payment + webhook + reconciliation
+- frontend performance
+- database migrations
+- production incident debugging
+
+## Completion standard
+
+Do not stop after creating a small subset. Complete all core phases in the plan. Only omit an optional advanced skill when the plan explicitly marks it optional and there is no demonstrated need.
+
+At the end, report exactly:
+
+1. Number of existing skills discovered.
+2. Number of new skills created.
+3. Number of skills skipped because they duplicated existing coverage.
+4. Number of validation issues found and resolved.
+5. Any remaining issues requiring manual review.
