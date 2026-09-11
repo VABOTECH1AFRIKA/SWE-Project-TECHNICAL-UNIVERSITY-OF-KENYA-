@@ -7,11 +7,19 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-
-const DB_PATH = process.env.DB_PATH || path.join('/private', 'studyhub.db');
+import {
+  clearAuthSession,
+  requireAuth,
+  requireRole,
+  setAuthSession,
+  type AuthenticatedRequest,
+  type Role,
+  type SessionUser,
+} from '../auth/session';
 
 function getDb() {
-  const db = new Database(DB_PATH);
+  const dbPath = process.env.DB_PATH || path.join('/private', 'studyhub.db');
+  const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   return db;
@@ -118,20 +126,21 @@ router.get('/videos', (req: Request, res: Response) => {
 });
 
 // ── Study Plan ────────────────────────────────────────────────────────────────
-router.get('/study-plan', (req: Request, res: Response) => {
+router.get('/study-plan', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
   try {
-    // Default to demo user u1 if no auth
-    const userId = (req as any).userId || 'u1';
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
     const rows: any[] = db.prepare('SELECT id,user_id as userId,title,course,due_date as dueDate,time,duration,type,completed FROM study_plan WHERE user_id=? ORDER BY due_date,time').all(userId);
     res.json(rows.map((r) => ({ ...r, completed: Boolean(r.completed) })));
   } finally { db.close(); }
 });
 
-router.post('/study-plan', (req: Request, res: Response) => {
+router.post('/study-plan', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
   try {
-    const userId = (req as any).userId || 'u1';
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
     const { title, course, dueDate, time, duration, type } = req.body;
     if (!title || !course || !dueDate) return res.status(400).json({ error: 'Missing fields' });
     const id = `sp${randomUUID().slice(0, 8)}`;
@@ -142,11 +151,12 @@ router.post('/study-plan', (req: Request, res: Response) => {
   } finally { db.close(); }
 });
 
-router.patch('/study-plan/:id/toggle', (req: Request, res: Response) => {
+router.patch('/study-plan/:id/toggle', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
   try {
     const row: any = db.prepare('SELECT * FROM study_plan WHERE id=?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
+    if (row.user_id !== req.user?.id) return res.status(403).json({ error: 'Forbidden' });
     db.prepare('UPDATE study_plan SET completed=? WHERE id=?').run(row.completed ? 0 : 1, req.params.id);
     const updated: any = db.prepare('SELECT id,user_id as userId,title,course,due_date as dueDate,time,duration,type,completed FROM study_plan WHERE id=?').get(req.params.id);
     res.json({ ...updated, completed: Boolean(updated.completed) });
@@ -154,10 +164,11 @@ router.patch('/study-plan/:id/toggle', (req: Request, res: Response) => {
 });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
-router.get('/analytics', (req: Request, res: Response) => {
+router.get('/analytics', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
   try {
-    const userId = (req as any).userId || 'u1';
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
     const row: any = db.prepare('SELECT * FROM analytics_snapshots WHERE user_id=?').get(userId);
     if (!row) return res.status(404).json({ error: 'No analytics found' });
     res.json({
@@ -237,7 +248,7 @@ router.post('/forum/:id/replies', (req: Request, res: Response) => {
 });
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-router.get('/admin/stats', (_req: Request, res: Response) => {
+router.get('/admin/stats', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
   const db = getDb();
   try {
     const totalStudents = (db.prepare("SELECT COUNT(*) as c FROM users WHERE role='student'").get() as any).c;
@@ -250,7 +261,7 @@ router.get('/admin/stats', (_req: Request, res: Response) => {
   } finally { db.close(); }
 });
 
-router.get('/admin/users', (req: Request, res: Response) => {
+router.get('/admin/users', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
   const db = getDb();
   try {
     const { search } = req.query;
@@ -261,7 +272,7 @@ router.get('/admin/users', (req: Request, res: Response) => {
   } finally { db.close(); }
 });
 
-router.patch('/admin/users/:id/status', (req: Request, res: Response) => {
+router.patch('/admin/users/:id/status', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
   const db = getDb();
   try {
     const { status } = req.body;
@@ -274,26 +285,70 @@ router.patch('/admin/users/:id/status', (req: Request, res: Response) => {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+const allowedRoles: Role[] = ['student', 'lecturer', 'admin'];
+
+function normalizeRole(role: unknown): Role {
+  if (typeof role === 'string' && allowedRoles.includes(role as Role)) {
+    return role as Role;
+  }
+  return 'student';
+}
+
 router.post('/auth/register', (req: Request, res: Response) => {
   const db = getDb();
   try {
-    const { name, email, password, role = 'student', program = '', year = 1, department = '' } = req.body;
+    const { name, email, password, role, program = '', year = 1, department = '' } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     const existing = db.prepare('SELECT id FROM users WHERE email=?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
+    const normalizedRole = normalizeRole(role);
     const id = `u${randomUUID().slice(0, 8)}`;
     const passwordHash = bcrypt.hashSync(password, 10);
     const avatar = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
     const joined = new Date().toISOString().split('T')[0];
 
     db.prepare('INSERT INTO users (id,name,email,password_hash,role,avatar,program,year,department,streak,status,joined) VALUES (?,?,?,?,?,?,?,?,?,0,?,?)')
-      .run(id, name, email, passwordHash, role, avatar, program, year, department, 'active', joined);
+      .run(id, name, email, passwordHash, normalizedRole, avatar, program, year, department, 'active', joined);
+
+    const analyticsId = `a${randomUUID().slice(0, 8)}`;
+    db.prepare(`
+      INSERT INTO analytics_snapshots (
+        id,
+        user_id,
+        overall_grade,
+        quiz_average,
+        study_hours,
+        assignments_done,
+        assignments_total,
+        day_streak,
+        courses_active,
+        weekly_progress,
+        recent_quiz_scores,
+        subject_strengths,
+        radar_data,
+        updated_at
+      ) VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, '[]', '[]', '[]', '[]', datetime('now'))
+    `).run(analyticsId, id);
 
     const user: any = db.prepare('SELECT id,name,email,role,avatar,program,year,department,streak,status,joined FROM users WHERE id=?').get(id);
-    res.status(201).json({ user, message: 'Registration successful' });
+    const sessionUser: SessionUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      program: user.program,
+      year: user.year,
+      department: user.department,
+      streak: user.streak,
+      status: user.status,
+    };
+
+    setAuthSession(res, sessionUser);
+    res.status(201).json({ user: sessionUser, message: 'Registration successful' });
   } finally { db.close(); }
 });
 
@@ -310,22 +365,38 @@ router.post('/auth/login', (req: Request, res: Response) => {
     const valid = bcrypt.compareSync(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
+    const sessionUser: SessionUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      program: user.program,
+      year: user.year,
+      department: user.department,
+      streak: user.streak,
+      status: user.status,
+    };
+
+    setAuthSession(res, sessionUser);
     res.json({
-      user: {
-        id: user.id, name: user.name, email: user.email, role: user.role,
-        avatar: user.avatar, program: user.program, year: user.year,
-        department: user.department, streak: user.streak, status: user.status,
-      },
+      user: sessionUser,
       message: 'Login successful',
     });
   } finally { db.close(); }
 });
 
+router.post('/auth/logout', requireAuth, (_req: Request, res: Response) => {
+  clearAuthSession(res);
+  res.json({ message: 'Logout successful' });
+});
+
 // ── User profile ──────────────────────────────────────────────────────────────
-router.get('/user/me', (req: Request, res: Response) => {
+router.get('/user/me', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
   try {
-    const userId = (req as any).userId || 'u1';
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
     const user: any = db.prepare('SELECT id,name,email,role,avatar,program,year,department,streak,status FROM users WHERE id=?').get(userId);
     if (!user) return res.status(404).json({ error: 'Not found' });
     res.json(user);
