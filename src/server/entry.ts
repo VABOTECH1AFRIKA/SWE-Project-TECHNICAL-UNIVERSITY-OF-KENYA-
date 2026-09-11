@@ -363,28 +363,31 @@ if (import.meta.env.PROD) {
 		});
 	});
 
-	const rawPort = process.env.PORT || "3000";
-	const port = parseInt(rawPort, 10);
-	if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-		// parseInt("abc") returns NaN; passing that to app.listen throws
-		// synchronously before the server.on("error") handler below can catch
-		// it. Fail fast with an actionable log rather than a cryptic crash.
-		console.error("ssr.server.invalid-port", { rawPort });
-		process.exit(1);
-	}
-	const host = process.env.HOST || "0.0.0.0";
-	const server = app.listen(port, host, () => {
-		console.log(`Server listening on http://${host}:${port}`);
-	});
-	server.on("error", (err: NodeJS.ErrnoException) => {
-		console.error("ssr.server.listen-failed", {
-			port,
-			host,
-			code: err.code,
-			error: err.message,
+	const isVercelRuntime = Boolean(process.env.VERCEL);
+	if (!isVercelRuntime) {
+		const rawPort = process.env.PORT || "3000";
+		const port = parseInt(rawPort, 10);
+		if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+			// parseInt("abc") returns NaN; passing that to app.listen throws
+			// synchronously before the server.on("error") handler below can catch
+			// it. Fail fast with an actionable log rather than a cryptic crash.
+			console.error("ssr.server.invalid-port", { rawPort });
+			process.exit(1);
+		}
+		const host = process.env.HOST || "0.0.0.0";
+		const server = app.listen(port, host, () => {
+			console.log(`Server listening on http://${host}:${port}`);
 		});
-		process.exit(1);
-	});
+		server.on("error", (err: NodeJS.ErrnoException) => {
+			console.error("ssr.server.listen-failed", {
+				port,
+				host,
+				code: err.code,
+				error: err.message,
+			});
+			process.exit(1);
+		});
+	}
 }
 
 export default app;
