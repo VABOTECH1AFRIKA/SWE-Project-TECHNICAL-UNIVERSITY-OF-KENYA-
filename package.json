@@ -1,6 +1,7 @@
 {
   "name": "v8-app-template",
   "version": "1.0.0",
+  "packageManager": "npm@10.9.4",
   "type": "module",
   "imports": {
     "#airo/secrets": "./export-plugins/airo-secrets.ts"
