@@ -3,10 +3,7 @@
  * All /api/* routes served directly from the SQLite database.
  */
 import { Router, type Request, type Response } from 'express';
-import Database from 'better-sqlite3';
-import path from 'path';
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
 import {
   clearAuthSession,
   parseSessionCookie,
@@ -18,272 +15,155 @@ import {
   type Role,
   type SessionUser,
 } from '../auth/session';
-
-function getDb() {
-  const dbPath = process.env.DB_PATH || path.join('/private', 'studyhub.db');
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return db;
-}
+import { dataAccess } from '../data';
 
 const router = Router();
 
 // ── Courses ───────────────────────────────────────────────────────────────────
-router.get('/courses', (_req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const rows = db.prepare('SELECT id,code,title,color,progress,notes_count as notesCount,assignments_count as assignmentsCount,icon,lecturer FROM courses ORDER BY code').all();
-    res.json(rows);
-  } finally { db.close(); }
+router.get('/courses', async (_req: Request, res: Response) => {
+  const rows = await dataAccess.courses.list();
+  res.json(rows);
 });
 
-router.get('/courses/:id', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const row = db.prepare('SELECT id,code,title,color,progress,notes_count as notesCount,assignments_count as assignmentsCount,icon,lecturer FROM courses WHERE id=? OR code=?').get(req.params.id, req.params.id);
-    if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
-  } finally { db.close(); }
+router.get('/courses/:id', async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const row = await dataAccess.courses.getByIdOrCode(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
 });
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
-router.get('/notes', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { course } = req.query;
-    const rows = course
-      ? db.prepare('SELECT * FROM notes WHERE course=? ORDER BY date DESC').all(course)
-      : db.prepare('SELECT * FROM notes ORDER BY date DESC').all();
-    res.json(rows);
-  } finally { db.close(); }
+router.get('/notes', async (req: Request, res: Response) => {
+  const { course } = req.query;
+  const rows = course ? await dataAccess.notes.list(String(course)) : await dataAccess.notes.list();
+  res.json(rows);
 });
 
 // ── Assignments ───────────────────────────────────────────────────────────────
-router.get('/assignments', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { course } = req.query;
-    const rows = course
-      ? db.prepare('SELECT id,title,course,due_date as dueDate,status,grade,max_grade as maxGrade,weight FROM assignments WHERE course=? ORDER BY due_date').all(course)
-      : db.prepare('SELECT id,title,course,due_date as dueDate,status,grade,max_grade as maxGrade,weight FROM assignments ORDER BY due_date').all();
-    res.json(rows);
-  } finally { db.close(); }
+router.get('/assignments', async (req: Request, res: Response) => {
+  const { course } = req.query;
+  const rows = course ? await dataAccess.assignments.list(String(course)) : await dataAccess.assignments.list();
+  res.json(rows);
 });
 
 // ── Quizzes ───────────────────────────────────────────────────────────────────
-router.get('/quizzes', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { course } = req.query;
-    const quizRows: any[] = course
-      ? db.prepare('SELECT id,title,course,difficulty,question_count as questionCount,duration,best_score as bestScore,ai_generated as aiGenerated FROM quizzes WHERE course=?').all(course)
-      : db.prepare('SELECT id,title,course,difficulty,question_count as questionCount,duration,best_score as bestScore,ai_generated as aiGenerated FROM quizzes').all();
-
-    const result = quizRows.map((q) => {
-      const questions = db.prepare('SELECT id,question,options,correct,explanation FROM quiz_questions WHERE quiz_id=? ORDER BY order_idx').all(q.id) as any[];
-      return {
-        ...q,
-        aiGenerated: Boolean(q.aiGenerated),
-        bestScore: q.bestScore ?? null,
-        questions: questions.map((qq) => ({ ...qq, options: JSON.parse(qq.options) })),
-      };
-    });
-    res.json(result);
-  } finally { db.close(); }
+router.get('/quizzes', async (req: Request, res: Response) => {
+  const { course } = req.query;
+  const rows = course ? await dataAccess.quizzes.list(String(course)) : await dataAccess.quizzes.list();
+  res.json(rows);
 });
 
-router.get('/quizzes/:id', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const q: any = db.prepare('SELECT id,title,course,difficulty,question_count as questionCount,duration,best_score as bestScore,ai_generated as aiGenerated FROM quizzes WHERE id=?').get(req.params.id);
-    if (!q) return res.status(404).json({ error: 'Not found' });
-    const questions = db.prepare('SELECT id,question,options,correct,explanation FROM quiz_questions WHERE quiz_id=? ORDER BY order_idx').all(q.id) as any[];
-    res.json({ ...q, aiGenerated: Boolean(q.aiGenerated), bestScore: q.bestScore ?? null, questions: questions.map((qq) => ({ ...qq, options: JSON.parse(qq.options) })) });
-  } finally { db.close(); }
+router.get('/quizzes/:id', async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const q = await dataAccess.quizzes.getById(id);
+  if (!q) return res.status(404).json({ error: 'Not found' });
+  res.json(q);
 });
 
 // ── Flashcards ────────────────────────────────────────────────────────────────
-router.get('/flashcards', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { deck } = req.query;
-    const rows: any[] = deck
-      ? db.prepare('SELECT id,deck,front,back,ai_generated as aiGenerated FROM flashcards WHERE deck=?').all(deck)
-      : db.prepare('SELECT id,deck,front,back,ai_generated as aiGenerated FROM flashcards').all();
-    res.json(rows.map((r) => ({ ...r, aiGenerated: Boolean(r.aiGenerated) })));
-  } finally { db.close(); }
+router.get('/flashcards', async (req: Request, res: Response) => {
+  const { deck } = req.query;
+  const rows = deck ? await dataAccess.flashcards.list(String(deck)) : await dataAccess.flashcards.list();
+  res.json(rows);
 });
 
 // ── Videos ────────────────────────────────────────────────────────────────────
-router.get('/videos', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { course } = req.query;
-    const rows = course
-      ? db.prepare('SELECT id,title,channel,thumbnail,duration,views,relevance,course,uploaded_ago as uploadedAgo FROM videos WHERE course=? ORDER BY relevance DESC').all(course)
-      : db.prepare('SELECT id,title,channel,thumbnail,duration,views,relevance,course,uploaded_ago as uploadedAgo FROM videos ORDER BY relevance DESC').all();
-    res.json(rows);
-  } finally { db.close(); }
+router.get('/videos', async (req: Request, res: Response) => {
+  const { course } = req.query;
+  const rows = course ? await dataAccess.videos.list(String(course)) : await dataAccess.videos.list();
+  res.json(rows);
 });
 
 // ── Study Plan ────────────────────────────────────────────────────────────────
-router.get('/study-plan', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Authentication required' });
-    const rows: any[] = db.prepare('SELECT id,user_id as userId,title,course,due_date as dueDate,time,duration,type,completed FROM study_plan WHERE user_id=? ORDER BY due_date,time').all(userId);
-    res.json(rows.map((r) => ({ ...r, completed: Boolean(r.completed) })));
-  } finally { db.close(); }
+router.get('/study-plan', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const rows = await dataAccess.studyPlan.listByUser(userId);
+  res.json(rows);
 });
 
-router.post('/study-plan', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Authentication required' });
-    const { title, course, dueDate, time, duration, type } = req.body;
-    if (!title || !course || !dueDate) return res.status(400).json({ error: 'Missing fields' });
-    const id = `sp${randomUUID().slice(0, 8)}`;
-    db.prepare('INSERT INTO study_plan (id,user_id,title,course,due_date,time,duration,type,completed) VALUES (?,?,?,?,?,?,?,?,0)')
-      .run(id, userId, title, course, dueDate, time || '09:00', duration || 60, type || 'study');
-    const row: any = db.prepare('SELECT id,user_id as userId,title,course,due_date as dueDate,time,duration,type,completed FROM study_plan WHERE id=?').get(id);
-    res.status(201).json({ ...row, completed: Boolean(row.completed) });
-  } finally { db.close(); }
+router.post('/study-plan', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const { title, course, dueDate, time, duration, type } = req.body;
+  if (!title || !course || !dueDate) return res.status(400).json({ error: 'Missing fields' });
+  const row = await dataAccess.studyPlan.create(userId, { title, course, dueDate, time, duration, type });
+  res.status(201).json(row);
 });
 
-router.patch('/study-plan/:id/toggle', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  try {
-    const row: any = db.prepare('SELECT * FROM study_plan WHERE id=?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'Not found' });
-    if (row.user_id !== req.user?.id) return res.status(403).json({ error: 'Forbidden' });
-    db.prepare('UPDATE study_plan SET completed=? WHERE id=?').run(row.completed ? 0 : 1, req.params.id);
-    const updated: any = db.prepare('SELECT id,user_id as userId,title,course,due_date as dueDate,time,duration,type,completed FROM study_plan WHERE id=?').get(req.params.id);
-    res.json({ ...updated, completed: Boolean(updated.completed) });
-  } finally { db.close(); }
+router.patch('/study-plan/:id/toggle', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const result = await dataAccess.studyPlan.toggle(id, req.user?.id ?? '');
+
+  if (result === null) return res.status(404).json({ error: 'Not found' });
+  if (result === 'forbidden') return res.status(403).json({ error: 'Forbidden' });
+
+  res.json(result);
 });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
-router.get('/analytics', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Authentication required' });
-    const row: any = db.prepare('SELECT * FROM analytics_snapshots WHERE user_id=?').get(userId);
-    if (!row) return res.status(404).json({ error: 'No analytics found' });
-    res.json({
-      overallGrade: row.overall_grade,
-      quizAverage: row.quiz_average,
-      studyHours: row.study_hours,
-      assignmentsDone: row.assignments_done,
-      assignmentsTotal: row.assignments_total,
-      dayStreak: row.day_streak,
-      coursesActive: row.courses_active,
-      weeklyProgress: JSON.parse(row.weekly_progress),
-      recentQuizScores: JSON.parse(row.recent_quiz_scores),
-      subjectStrengths: JSON.parse(row.subject_strengths),
-      radarData: JSON.parse(row.radar_data),
-    });
-  } finally { db.close(); }
+router.get('/analytics', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+  const row = await dataAccess.analytics.getByUser(userId);
+  if (!row) return res.status(404).json({ error: 'No analytics found' });
+
+  res.json(row);
 });
 
 // ── Forum ─────────────────────────────────────────────────────────────────────
-router.get('/forum', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { course } = req.query;
-    const threads: any[] = course
-      ? db.prepare('SELECT * FROM forum_threads WHERE course=? ORDER BY created_at DESC').all(course)
-      : db.prepare('SELECT * FROM forum_threads ORDER BY created_at DESC').all();
-
-    const result = threads.map((t) => {
-      const replies: any[] = db.prepare('SELECT id,thread_id as threadId,author,author_role as authorRole,content,timestamp FROM forum_replies WHERE thread_id=? ORDER BY timestamp').all(t.id);
-      return {
-        id: t.id, title: t.title, course: t.course,
-        author: t.author, authorRole: t.author_role,
-        replies: replies.length, views: t.views,
-        tags: JSON.parse(t.tags), solved: Boolean(t.solved),
-        lastActivity: t.last_activity, content: t.content,
-        replyList: replies,
-      };
-    });
-    res.json(result);
-  } finally { db.close(); }
+router.get('/forum', async (req: Request, res: Response) => {
+  const { course } = req.query;
+  const rows = course ? await dataAccess.forum.listThreads(String(course)) : await dataAccess.forum.listThreads();
+  res.json(rows);
 });
 
-router.get('/forum/:id', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const t: any = db.prepare('SELECT * FROM forum_threads WHERE id=?').get(req.params.id);
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    const replies: any[] = db.prepare('SELECT id,thread_id as threadId,author,author_role as authorRole,content,timestamp FROM forum_replies WHERE thread_id=? ORDER BY timestamp').all(t.id);
-    res.json({ id: t.id, title: t.title, course: t.course, author: t.author, authorRole: t.author_role, replies: replies.length, views: t.views, tags: JSON.parse(t.tags), solved: Boolean(t.solved), lastActivity: t.last_activity, content: t.content, replyList: replies });
-  } finally { db.close(); }
+router.get('/forum/:id', async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const thread = await dataAccess.forum.getThread(id);
+  if (!thread) return res.status(404).json({ error: 'Not found' });
+  res.json(thread);
 });
 
-router.post('/forum', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { title, course, author, authorRole, content, tags } = req.body;
-    if (!title || !course) return res.status(400).json({ error: 'Missing fields' });
-    const id = `ft${randomUUID().slice(0, 8)}`;
-    db.prepare('INSERT INTO forum_threads (id,title,course,author,author_role,content,tags,views,solved,last_activity) VALUES (?,?,?,?,?,?,?,0,0,?)')
-      .run(id, title, course, author || 'Anonymous', authorRole || 'student', content || '', JSON.stringify(tags || []), 'just now');
-    const t: any = db.prepare('SELECT * FROM forum_threads WHERE id=?').get(id);
-    res.status(201).json({ id: t.id, title: t.title, course: t.course, author: t.author, authorRole: t.author_role, replies: 0, views: 0, tags: JSON.parse(t.tags), solved: false, lastActivity: 'just now', content: t.content, replyList: [] });
-  } finally { db.close(); }
+router.post('/forum', async (req: Request, res: Response) => {
+  const { title, course, author, authorRole, content, tags } = req.body;
+  if (!title || !course) return res.status(400).json({ error: 'Missing fields' });
+  const thread = await dataAccess.forum.createThread({ title, course, author, authorRole, content, tags });
+  res.status(201).json(thread);
 });
 
-router.post('/forum/:id/replies', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { author, authorRole, content } = req.body;
-    if (!content) return res.status(400).json({ error: 'Missing content' });
-    const replyId = `r${randomUUID().slice(0, 8)}`;
-    db.prepare('INSERT INTO forum_replies (id,thread_id,author,author_role,content,timestamp) VALUES (?,?,?,?,?,?)')
-      .run(replyId, req.params.id, author || 'Anonymous', authorRole || 'student', content, 'just now');
-    db.prepare('UPDATE forum_threads SET last_activity=? WHERE id=?').run('just now', req.params.id);
-    res.status(201).json({ id: replyId, threadId: req.params.id, author: author || 'Anonymous', authorRole: authorRole || 'student', content, timestamp: 'just now' });
-  } finally { db.close(); }
+router.post('/forum/:id/replies', async (req: Request, res: Response) => {
+  const { author, authorRole, content } = req.body;
+  if (!content) return res.status(400).json({ error: 'Missing content' });
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const reply = await dataAccess.forum.createReply(id, { author, authorRole, content });
+  if (!reply) return res.status(404).json({ error: 'Not found' });
+
+  res.status(201).json(reply);
 });
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-router.get('/admin/stats', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const totalStudents = (db.prepare("SELECT COUNT(*) as c FROM users WHERE role='student'").get() as any).c;
-    const lecturers = (db.prepare("SELECT COUNT(*) as c FROM users WHERE role='lecturer'").get() as any).c;
-    const totalCourses = (db.prepare('SELECT COUNT(*) as c FROM courses').get() as any).c;
-    const activeUsers = (db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get() as any).c;
-    const notesUploaded = (db.prepare('SELECT COUNT(*) as c FROM notes').get() as any).c;
-    const quizzesTaken = (db.prepare('SELECT COUNT(*) as c FROM quizzes WHERE best_score IS NOT NULL').get() as any).c;
-    res.json({ totalStudents, lecturers, courses: totalCourses, activeUsers, notesUploaded, quizzesTaken });
-  } finally { db.close(); }
+router.get('/admin/stats', requireAuth, requireRole('admin'), async (_req: Request, res: Response) => {
+  const stats = await dataAccess.admin.getStats();
+  res.json(stats);
 });
 
-router.get('/admin/users', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { search } = req.query;
-    const rows: any[] = search
-      ? db.prepare("SELECT id,name,email,role,status,joined,avatar FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY joined DESC").all(`%${search}%`, `%${search}%`)
-      : db.prepare('SELECT id,name,email,role,status,joined,avatar FROM users ORDER BY joined DESC').all();
-    res.json(rows);
-  } finally { db.close(); }
+router.get('/admin/users', requireAuth, requireRole('admin'), async (req: Request, res: Response) => {
+  const { search } = req.query;
+  const rows = search ? await dataAccess.admin.listUsers(String(search)) : await dataAccess.admin.listUsers();
+  res.json(rows);
 });
 
-router.patch('/admin/users/:id/status', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { status } = req.body;
-    if (!['active', 'suspended'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
-    db.prepare('UPDATE users SET status=? WHERE id=?').run(status, req.params.id);
-    const row = db.prepare('SELECT id,name,email,role,status,joined,avatar FROM users WHERE id=?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
-  } finally { db.close(); }
+router.patch('/admin/users/:id/status', requireAuth, requireRole('admin'), async (req: Request, res: Response) => {
+  const { status } = req.body;
+  if (!['active', 'suspended'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const row = await dataAccess.admin.updateUserStatus(id, status);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -296,117 +176,77 @@ function normalizeRole(role: unknown): Role {
   return 'student';
 }
 
-router.post('/auth/register', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { name, email, password, role, program = '', year = 1, department = '' } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+router.post('/auth/register', async (req: Request, res: Response) => {
+  const { name, email, password, role, program = '', year = 1, department = '' } = req.body;
+  if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-    const existing = db.prepare('SELECT id FROM users WHERE email=?').get(email);
-    if (existing) return res.status(409).json({ error: 'Email already registered' });
+  const existing = await dataAccess.users.getByEmail(email);
+  if (existing) return res.status(409).json({ error: 'Email already registered' });
 
-    const normalizedRole = normalizeRole(role);
-    const id = `u${randomUUID().slice(0, 8)}`;
-    const passwordHash = bcrypt.hashSync(password, 10);
-    const avatar = name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
-    const joined = new Date().toISOString().split('T')[0];
+  const normalizedRole = normalizeRole(role);
+  const avatar = name.split(' ').map((word: string) => word[0]).join('').toUpperCase().slice(0, 2);
+  const user: any = await dataAccess.users.create({
+    name,
+    email,
+    passwordHash: bcrypt.hashSync(password, 10),
+    role: normalizedRole,
+    avatar,
+    program,
+    year,
+    department,
+  });
 
-    db.prepare('INSERT INTO users (id,name,email,password_hash,role,avatar,program,year,department,streak,status,joined) VALUES (?,?,?,?,?,?,?,?,?,0,?,?)')
-      .run(id, name, email, passwordHash, normalizedRole, avatar, program, year, department, 'active', joined);
-
-    const analyticsId = `a${randomUUID().slice(0, 8)}`;
-    db.prepare(`
-      INSERT INTO analytics_snapshots (
-        id,
-        user_id,
-        overall_grade,
-        quiz_average,
-        study_hours,
-        assignments_done,
-        assignments_total,
-        day_streak,
-        courses_active,
-        weekly_progress,
-        recent_quiz_scores,
-        subject_strengths,
-        radar_data,
-        updated_at
-      ) VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, '[]', '[]', '[]', '[]', datetime('now'))
-    `).run(analyticsId, id);
-
-    const user: any = db.prepare('SELECT id,name,email,role,avatar,program,year,department,streak,status,joined FROM users WHERE id=?').get(id);
-    const sessionUser: SessionUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      program: user.program,
-      year: user.year,
-      department: user.department,
-      streak: user.streak,
-      status: user.status,
-    };
-
-    setAuthSession(res, sessionUser);
-    res.status(201).json({ user: sessionUser, message: 'Registration successful' });
-  } finally { db.close(); }
+  await dataAccess.analytics.initialize(user.id);
+  const sessionUser: SessionUser = { ...user, role: normalizeRole(user.role), avatar: user.avatar || avatar };
+  await setAuthSession(res, sessionUser);
+  res.status(201).json({ user: sessionUser, message: 'Registration successful' });
 });
 
-router.post('/auth/login', (req: Request, res: Response) => {
-  const db = getDb();
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+router.post('/auth/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
 
-    const user: any = db.prepare('SELECT * FROM users WHERE email=?').get(email);
-    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
-    if (user.status === 'suspended') return res.status(403).json({ error: 'Account suspended. Please contact support.' });
+  const user: any = await dataAccess.users.getByEmail(email);
+  if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+  if (user.status === 'suspended') return res.status(403).json({ error: 'Account suspended. Please contact support.' });
 
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+  const valid = bcrypt.compareSync(password, user.password_hash);
+  if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
-    const sessionUser: SessionUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      program: user.program,
-      year: user.year,
-      department: user.department,
-      streak: user.streak,
-      status: user.status,
-    };
-
-    setAuthSession(res, sessionUser);
-    res.json({
-      user: sessionUser,
-      message: 'Login successful',
-    });
-  } finally { db.close(); }
+  const sessionUser: SessionUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: normalizeRole(user.role),
+    avatar: user.avatar,
+    program: user.program,
+    year: user.year,
+    department: user.department,
+    streak: user.streak,
+    status: user.status,
+  };
+  await setAuthSession(res, sessionUser);
+  res.json({ user: sessionUser, message: 'Login successful' });
 });
 
-router.post('/auth/logout', requireAuth, (req: Request, res: Response) => {
+router.post('/auth/logout', requireAuth, async (req: Request, res: Response) => {
   const token = parseSessionCookie(req);
   if (token) {
-    revokeSession(token);
+    await revokeSession(token);
   }
   clearAuthSession(res);
   res.json({ message: 'Logout successful' });
 });
 
 // ── User profile ──────────────────────────────────────────────────────────────
-router.get('/user/me', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Authentication required' });
-    const user: any = db.prepare('SELECT id,name,email,role,avatar,program,year,department,streak,status FROM users WHERE id=?').get(userId);
-    if (!user) return res.status(404).json({ error: 'Not found' });
-    res.json(user);
-  } finally { db.close(); }
+router.get('/user/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+  const user = await dataAccess.users.getById(userId);
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  res.json(user);
 });
 
 export default router;

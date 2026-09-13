@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { existsSync, statSync } from "node:fs";
@@ -366,7 +366,13 @@ if (corsOrigins.length === 0) {
   corsOrigins.push("*");
 }
 
-export default defineConfig(({ isSsrBuild }) => ({
+export default defineConfig(({ isSsrBuild, mode }) => {
+  const runtimeEnv = loadEnv(mode, process.cwd(), "");
+  for (const key of ["DATABASE_PROVIDER", "DB_PATH", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
+    if (!process.env[key] && runtimeEnv[key]) process.env[key] = runtimeEnv[key];
+  }
+
+  return ({
   envPrefix: ["VITE_", "SITE_"],
 
   plugins: [
@@ -405,7 +411,7 @@ export default defineConfig(({ isSsrBuild }) => ({
   },
 
   ssr: {
-    noExternal: isSsrBuild ? true : undefined
+    noExternal: undefined
   },
 
   server: {
@@ -504,4 +510,5 @@ export default defineConfig(({ isSsrBuild }) => ({
       }
     }
   }
-}));
+  });
+});
