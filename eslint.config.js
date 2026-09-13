@@ -1,8 +1,10 @@
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import noUnsanitized from 'eslint-plugin-no-unsanitized';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import globals from 'globals';
 
 export default [
   {
@@ -13,29 +15,27 @@ export default [
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
-        console: 'readonly',
-        process: 'readonly',
-        Buffer: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        global: 'readonly',
-        window: 'readonly',
-        document: 'readonly',
-        navigator: 'readonly',
-        localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        HTMLElement: 'readonly',
-        HTMLDivElement: 'readonly',
-        HTMLButtonElement: 'readonly',
-        HTMLInputElement: 'readonly',
-        HTMLSpanElement: 'readonly',
-        HTMLParagraphElement: 'readonly',
-        HTMLHeadingElement: 'readonly',
-        HTMLTableElement: 'readonly',
-        HTMLTableSectionElement: 'readonly',
-        HTMLTableRowElement: 'readonly',
-        HTMLTableCellElement: 'readonly',
-        HTMLTableCaptionElement: 'readonly',
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2021,
+        React: 'readonly',
+        RequestInit: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        Headers: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        Event: 'readonly',
+        CustomEvent: 'readonly',
+        MessageEvent: 'readonly',
+        MessageEventSource: 'readonly',
+        MutationObserver: 'readonly',
+        MutationCallback: 'readonly',
+        EventListener: 'readonly',
+        Window: 'readonly',
+        location: 'readonly',
+        NodeJS: 'readonly',
+        queueMicrotask: 'readonly',
       },
       parser: tsparser,
       parserOptions: {
@@ -48,6 +48,7 @@ export default [
       '@typescript-eslint': tseslint,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+      'no-unsanitized': noUnsanitized,
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -64,6 +65,7 @@ export default [
       '@typescript-eslint/no-empty-function': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
+      'no-unsanitized/method': 'error',
     },
   },
 ];

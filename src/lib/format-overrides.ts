@@ -185,6 +185,16 @@ const FONT_SIZE_LINE_HEIGHT: Record<string, string> = {
   '8rem': '1',
 }
 
+export const SIZE_SCALE = Object.keys(FONT_SIZE_LINE_HEIGHT) as string[]
+
+export function lineHeightForFontSize(fontSize: string): string {
+  return FONT_SIZE_LINE_HEIGHT[fontSize] ?? 'normal'
+}
+
+export function remForSizeClass(size: string): string {
+  return size
+}
+
 export function buildFormatOverrideStyle(marks: FormatOverrideMarks): CSSProperties {
   const lineHeight: string | undefined = marks.fontSize ? FONT_SIZE_LINE_HEIGHT[marks.fontSize] : undefined
   return {

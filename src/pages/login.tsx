@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { GraduationCap, ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { api } from '@/lib/api';
 import { C, CA } from '@/lib/colors';
 
 export default function Login() {
@@ -19,22 +20,24 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Login failed'); return; }
-      // Store user in sessionStorage (or localStorage if remember)
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem('studyhub_user', JSON.stringify(data.user));
-      // Redirect based on role
+      const data = await api.login(email, password);
+
+      localStorage.removeItem('studyhub_user');
+      sessionStorage.removeItem('studyhub_user');
+
+      if (remember) {
+        localStorage.setItem('studyhub_last_email', email);
+      } else {
+        sessionStorage.setItem('studyhub_last_email', email);
+      }
+
       const role = data.user.role;
       if (role === 'admin') navigate('/admin');
       else if (role === 'lecturer') navigate('/lecturer');
       else navigate('/dashboard');
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message.includes('API ') ? message.replace(/^API \d+:\s*/, '') : message);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

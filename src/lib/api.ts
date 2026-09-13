@@ -14,6 +14,7 @@ async function request<T>(
   options?: RequestInit,
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -111,6 +112,11 @@ export interface User {
   department?: string;
 }
 
+export interface AuthResponse {
+  user: User;
+  message?: string;
+}
+
 // ── API Methods ────────────────────────────────────────────────────────────
 
 export const api = {
@@ -171,12 +177,14 @@ export const api = {
     request<AdminUser>(`/admin/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   // Auth
+  getCurrentUser: () => request<User>('/user/me'),
   login: (email: string, password: string) =>
-    request<{ token: string; user: User }>('/auth/login', {
+    request<AuthResponse>('/auth/login', {
       method: 'POST', body: JSON.stringify({ email, password }),
     }),
   register: (data: { name: string; email: string; password: string; role: string }) =>
-    request<{ token: string; user: User }>('/auth/register', {
+    request<AuthResponse>('/auth/register', {
       method: 'POST', body: JSON.stringify(data),
     }),
+  logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
 };

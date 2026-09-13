@@ -54,9 +54,47 @@ INFERRED:
 - `src/server/api/studyhub-proxy.ts` appears intended to be a Python FastAPI proxy, but the repository does not currently wire it into the runtime server entry.
 - `src/server/api/studyhub-data.ts` appears intended as a fallback data layer, but the current server entry does not mount it either.
 
-REQUIRES VERIFICATION:
-- Whether the Python FastAPI service exists in the deployment environment and serves the intended upstream routes.
-- Whether the in-memory fallback data is purposely kept as a code artifact rather than an unused stub.
+## 1.3 Verified Data Architecture (Phase 2 completion)
+
+CONFIRMED:
+- The authoritative runtime data path is the SQLite-backed router in `src/server/api/studyhub-sqlite.ts`.
+- `src/server/entry.ts` mounts `studyhubSqlite` at `/api`, so that router is the actual live API surface for request handling.
+- `src/server/data/boundary.ts` and `src/server/data/index.ts` explicitly classify the runtime data topology and record that SQLite is the canonical runtime path.
+
+CONFIRMED:
+- `src/server/api/studyhub-proxy.ts` is an optional Python integration path only. It is not mounted in the active runtime entry and should not be treated as the canonical data layer unless deployment evidence proves otherwise.
+- `src/server/api/studyhub-data.ts` is a demo/in-memory fallback router. It mirrors the live route structure but is not mounted in `src/server/entry.ts` and must not silently replace the SQLite runtime.
+- `src/server/db/client.ts`, `drizzle.config.ts`, `src/server/db/config.ts`, `src/server/db/schema.ts`, `src/server/db/sqlite-client.ts`, and `src/server/db/sqlite-schema.ts` exist as legacy or auxiliary data artifacts, but none of them are the current request-handling path for the shipped app.
+
+CONFIRMED:
+- The live server path is therefore: `src/server/entry.ts` -> `app.use('/api', studyhubSqlite)` -> direct SQLite access in `src/server/api/studyhub-sqlite.ts` using `better-sqlite3` + `DB_PATH`.
+- The runtime architecture is now documented in `src/server/data/boundary.ts` and `src/server/data/index.ts` as a deliberate source map, rather than an inferred or implicit runtime assumption.
+
+## 1.4 Verified Authentication Architecture (Phase 2 completion)
+
+CONFIRMED:
+- The live authentication model is server-enforced session cookies backed by SQLite, implemented in `src/server/auth/session.ts` and consumed by `src/server/api/studyhub-sqlite.ts`.
+- The active cookie name is `studyhub_session`; the session token is hashed before storage and verified on every protected request.
+- Session expiry is enforced by `SESSION_TTL_MS` in `src/server/auth/session.ts`, and `requireAuth`/`requireRole` now reject missing, invalid, expired, or cross-role requests.
+
+CONFIRMED:
+- `requireAuth` populates the authenticated user context from the server-side session record, so the runtime no longer trusts a client-supplied `req.userId` fallback such as `u1`.
+- `requireRole('student' | 'lecturer' | 'admin')` is used on the protected administrative and user-scoped endpoints in `src/server/api/studyhub-sqlite.ts`.
+- Protected routes now include `/study-plan`, `/analytics`, `/user/me`, `/admin/stats`, `/admin/users`, and `/admin/users/:id/status`.
+
+CONFIRMED:
+- `POST /auth/login` issues a secure session cookie on successful credential verification.
+- `POST /auth/register` creates the user and establishes the same session-cookie flow for newly created accounts.
+- `POST /auth/logout` clears the server-issued cookie and revokes the stored session.
+
+CONFIRMED:
+- `src/lib/api.ts` now sends `credentials: 'same-origin'` with all requests and exposes `getCurrentUser()` and `logout()` helpers that align with the server cookie/session model.
+- `src/pages/login.tsx`, `src/pages/register.tsx`, and `src/layouts/DashboardLayout.tsx` no longer treat browser storage (`studyhub_user`) as the authority for authentication or authorization.
+- Browser storage is now limited to convenience values such as `studyhub_last_email`, while the server owns identity and role enforcement.
+
+CONFIRMED:
+- The old `u1` fallback behavior has been removed from the live server routes, eliminating the prior silent identity bypass on user-scoped endpoints.
+- The auth regression suite in `src/server/auth.test.ts` verifies the protected-route behavior, login failures, missing/invalid auth, admin-only access, lecturer/student cross-role rejection, and the manual impersonation regression scenario.
 
 ## 2. Complete API Route Inventory
 

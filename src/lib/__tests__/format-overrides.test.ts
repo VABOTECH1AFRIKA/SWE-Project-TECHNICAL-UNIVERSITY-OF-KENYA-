@@ -2,15 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   EMPTY_FORMAT_OVERRIDE_BUNDLE,
+  SIZE_SCALE,
   buildFormatOverrideStyle,
   deriveFormatOverrideScope,
   findApplicableFormatOverride,
+  lineHeightForFontSize,
+  remForSizeClass,
   targetsMatch,
   type FormatOverrideBundle,
   type FormatOverrideSidecar,
   type FormatOverrideTarget,
 } from '../format-overrides'
-import { SIZE_SCALE, lineHeightForFontSize, remForSizeClass } from '../../../export-plugins/utils/text-size'
 
 const expressionHash = `sha256:${'a'.repeat(64)}`
 const differentExpressionHash = `sha256:${'b'.repeat(64)}`

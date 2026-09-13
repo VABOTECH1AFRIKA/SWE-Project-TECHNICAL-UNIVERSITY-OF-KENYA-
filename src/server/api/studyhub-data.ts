@@ -132,7 +132,11 @@ const ADMIN_USERS: Record<string, unknown>[] = [
 router.get('/courses', (_req, res) => res.json(COURSES));
 router.get('/courses/:id', (req, res) => {
   const c = COURSES.find((x) => x.id === req.params.id || x.code === req.params.id.toUpperCase());
-  c ? res.json(c) : res.status(404).json({ error: 'Not found' });
+  if (c) {
+    res.json(c);
+    return;
+  }
+  res.status(404).json({ error: 'Not found' });
 });
 
 router.get('/notes', (req, res) => {
@@ -151,7 +155,11 @@ router.get('/quizzes', (req, res) => {
 });
 router.get('/quizzes/:id', (req, res) => {
   const q = QUIZZES.find((x) => x.id === req.params.id);
-  q ? res.json(q) : res.status(404).json({ error: 'Not found' });
+  if (q) {
+    res.json(q);
+    return;
+  }
+  res.status(404).json({ error: 'Not found' });
 });
 
 router.get('/flashcards', (req, res) => {
@@ -185,7 +193,11 @@ router.get('/forum', (req, res) => {
 });
 router.get('/forum/:id', (req, res) => {
   const t = FORUM_THREADS.find((x) => (x as { id: string }).id === req.params.id);
-  t ? res.json(t) : res.status(404).json({ error: 'Not found' });
+  if (t) {
+    res.json(t);
+    return;
+  }
+  res.status(404).json({ error: 'Not found' });
 });
 router.post('/forum', (req: Request, res: Response) => {
   const thread = { id: `ft${Date.now()}`, ...req.body, replies: 0, views: 0, solved: false, lastActivity: 'just now', replyList: [] };

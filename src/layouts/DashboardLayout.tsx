@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+import { api } from '@/lib/api';
 import {
   Home,
   BookOpen,
@@ -203,7 +204,15 @@ export default function DashboardLayout({ role }: DashboardLayoutProps) {
           <span>Settings</span>
         </button>
         <button
-          onClick={() => navigate('/')}
+          onClick={async () => {
+            try {
+              await api.logout();
+            } finally {
+              localStorage.removeItem('studyhub_user');
+              sessionStorage.removeItem('studyhub_user');
+              navigate('/');
+            }
+          }}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sm transition-all hover:bg-background"
           style={{ color: C.inkSoft }}
         >

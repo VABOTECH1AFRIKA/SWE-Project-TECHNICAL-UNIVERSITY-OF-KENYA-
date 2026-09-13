@@ -9,7 +9,17 @@ const RESOLVED_FORMAT_OVERRIDES_MODULE_ID = `\0${FORMAT_OVERRIDES_MODULE_ID}`;
 const EMPTY_SIDECAR = { version: 1, overrides: {} };
 const EMPTY_BUNDLE = { version: 1, scopes: {} };
 
-function readSidecarFile(filePath: string): unknown {
+function warnInvalidSidecar(scope: string, filePath: string): void {
+  console.warn(
+    JSON.stringify({
+      event: 'format-overrides.sidecar.invalid',
+      scope,
+      filePath,
+    }),
+  );
+}
+
+function readSidecarFile(filePath: string, scope: string): unknown {
   try {
     const parsed = JSON.parse(readFileSync(filePath, 'utf-8'));
     if (
@@ -19,10 +29,12 @@ function readSidecarFile(filePath: string): unknown {
       typeof parsed.overrides !== 'object' ||
       Array.isArray(parsed.overrides)
     ) {
+      warnInvalidSidecar(scope, filePath);
       return EMPTY_SIDECAR;
     }
     return parsed;
   } catch {
+    warnInvalidSidecar(scope, filePath);
     return EMPTY_SIDECAR;
   }
 }
@@ -50,7 +62,7 @@ function readSidecarBundle(root: string): unknown {
       .sort()
       .map((filePath) => {
         const scope = scopeFromFile(sidecarRoot, filePath);
-        return [scope, readSidecarFile(filePath)];
+        return [scope, readSidecarFile(filePath, scope)];
       }),
   );
 
@@ -70,6 +82,27 @@ export function formatOverridesPlugin(root: string = process.cwd()): Plugin {
     },
     load(id) {
       return id === RESOLVED_FORMAT_OVERRIDES_MODULE_ID ? buildModule(root) : null;
+    },
+    configureServer(server) {
+      const sidecarRoot = path.join(root, SIDECAR_DIRNAME);
+      server.watcher.add(sidecarRoot);
+
+      const handleSidecarChange = (filePath: string) => {
+        if (!filePath.includes(`${path.sep}${SIDECAR_DIRNAME}${path.sep}`)) return;
+
+        const bundle = readSidecarBundle(root);
+        const module = server.moduleGraph.getModuleById(RESOLVED_FORMAT_OVERRIDES_MODULE_ID);
+
+        if (module) {
+          server.moduleGraph.invalidateModule(module);
+        }
+
+        server.ws.send('format-overrides:update', bundle);
+      };
+
+      server.watcher.on('change', handleSidecarChange);
+      server.watcher.on('add', handleSidecarChange);
+      server.watcher.on('unlink', handleSidecarChange);
     },
   };
 }

@@ -70,7 +70,7 @@ function hashSessionToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function parseSessionCookie(req: Request): string | null {
+export function parseSessionCookie(req: Request): string | null {
   const cookieHeader = req.headers.cookie ?? '';
   const sessionCookie = cookieHeader
     .split(';')

@@ -9,8 +9,10 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import {
   clearAuthSession,
+  parseSessionCookie,
   requireAuth,
   requireRole,
+  revokeSession,
   setAuthSession,
   type AuthenticatedRequest,
   type Role,
@@ -386,7 +388,11 @@ router.post('/auth/login', (req: Request, res: Response) => {
   } finally { db.close(); }
 });
 
-router.post('/auth/logout', requireAuth, (_req: Request, res: Response) => {
+router.post('/auth/logout', requireAuth, (req: Request, res: Response) => {
+  const token = parseSessionCookie(req);
+  if (token) {
+    revokeSession(token);
+  }
   clearAuthSession(res);
   res.json({ message: 'Logout successful' });
 });

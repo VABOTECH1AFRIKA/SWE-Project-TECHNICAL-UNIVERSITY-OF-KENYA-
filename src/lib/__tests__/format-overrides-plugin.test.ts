@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Plugin } from 'vite'
 
-import { FORMAT_OVERRIDES_MODULE_ID, formatOverridesPlugin } from '../../../format-overrides-plugin'
+import { FORMAT_OVERRIDES_MODULE_ID, formatOverridesPlugin } from '../../../export-plugins/format-overrides-plugin'
 
 interface DirectPluginHooks {
   resolveId: (id: string) => unknown

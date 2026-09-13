@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { GraduationCap, ArrowLeft, User, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, ArrowLeft, User, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Helmet } from '@dr.pogodin/react-helmet';
+import { api } from '@/lib/api';
 import { C, CA } from '@/lib/colors';
 
 export default function Register() {
@@ -10,7 +11,6 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -24,23 +24,23 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          role: form.role,
-          program: form.program,
-          year: parseInt(form.year) || 1,
-        }),
+      const data = await api.register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Registration failed'); return; }
-      setSuccess('Account created! Redirecting to sign in…');
-      setTimeout(() => navigate('/login'), 1500);
-    } catch {
+
+      localStorage.removeItem('studyhub_user');
+      sessionStorage.removeItem('studyhub_user');
+
+      const role = data.user.role;
+      if (role === 'admin') navigate('/admin');
+      else if (role === 'lecturer') navigate('/lecturer');
+      else navigate('/dashboard');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Registration failed';
+      setError(message.includes('API ') ? message.replace(/^API \d+:\s*/, '') : message);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -84,13 +84,6 @@ export default function Register() {
                 {error}
               </div>
             )}
-            {success && (
-              <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4 text-sm" style={{ background: CA.sage10, color: C.sage }}>
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                {success}
-              </div>
-            )}
-
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Full name */}
               <div>
