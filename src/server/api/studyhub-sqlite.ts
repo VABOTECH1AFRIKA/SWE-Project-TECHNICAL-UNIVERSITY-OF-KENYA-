@@ -5,7 +5,6 @@
 import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import multer, { MulterError } from 'multer';
-import { rm } from 'node:fs/promises';
 import type { TutorRequest } from '../../lib/tutor-contract';
 import { TutorValidationError, tutorOrchestrator, validateTutorRequest } from '../ai/tutor-orchestrator';
 import {

@@ -38,7 +38,6 @@ export default function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message.includes('API ') ? message.replace(/^API \d+:\s*/, '') : message);
-      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
