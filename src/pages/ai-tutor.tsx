@@ -2,9 +2,8 @@ import { ai_tutor } from 'virtual:content';
 import { useState, useRef, useEffect } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
 import { Brain, Send, Paperclip, ChevronDown } from 'lucide-react';
-import { mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors } from '@/lib/colors';
-import { api } from '@/lib/api';
+import { api, type Course } from '@/lib/api';
 import type { TutorCitation, TutorMode } from '@/lib/tutor-contract';
 
 interface Message {
@@ -30,10 +29,36 @@ export default function AiTutor() {
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState('');
   const [conversationId, setConversationId] = useState<string>();
-  const [selectedCourse, setSelectedCourse] = useState(mockCourses[0].id);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [courseLoadError, setCourseLoadError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const course = mockCourses.find((c) => c.id === selectedCourse) || mockCourses[0];
+  const course = courses.find((c) => c.id === selectedCourse) ?? courses[0] ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await api.getMyCourses();
+        if (cancelled) return;
+        setCourses(rows);
+        setSelectedCourse(rows[0]?.id ?? '');
+        setCourseLoadError('');
+      } catch {
+        if (cancelled) return;
+        setCourses([]);
+        setSelectedCourse('');
+        setCourseLoadError('You do not have any authorized courses yet.');
+      } finally {
+        if (!cancelled) setLoadingCourses(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setConversationId(undefined);
@@ -45,6 +70,10 @@ export default function AiTutor() {
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
+    if (!selectedCourse || !courses.some((course) => course.id === selectedCourse)) {
+      setError('Select an authorized course before asking the tutor.');
+      return;
+    }
     const userMsg: Message = {
       id: `u${Date.now()}`,
       role: 'user',
@@ -118,6 +147,7 @@ export default function AiTutor() {
           <div className="relative">
             <select
               value={selectedCourse}
+              disabled={loadingCourses || courses.length === 0}
               onChange={(e) => setSelectedCourse(e.target.value)}
               className="appearance-none pl-3 pr-8 py-2 rounded-lg text-sm font-medium focus:outline-none"
               style={{
@@ -126,7 +156,7 @@ export default function AiTutor() {
                 color: C.ink,
               }}
             >
-              {mockCourses.map((c) => (
+              {courses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.code} — {c.title}
                 </option>
@@ -137,18 +167,24 @@ export default function AiTutor() {
         </div>
 
         {/* Context badge */}
-        <div
-          className="px-6 py-2 flex items-center gap-2 flex-shrink-0"
-          style={{ background: CA.teal10 }}
-        >
+        {course && (
           <div
-            className="w-2 h-2 rounded-full"
-            style={{ background: courseColors[course.code] }}
-          />
-          <p className="text-xs font-medium" style={{ color: C.teal }}>
-            Context: {course.code} {course.title} · {course.notesCount} notes loaded
-          </p>
-        </div>
+            className="px-6 py-2 flex items-center gap-2 flex-shrink-0"
+            style={{ background: CA.teal10 }}
+          >
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ background: courseColors[course.code] ?? C.teal }}
+            />
+            <p className="text-xs font-medium" style={{ color: C.teal }}>
+              Context: {course.code} {course.title} · {course.notesCount} notes loaded
+            </p>
+          </div>
+        )}
+
+        {courseLoadError && (
+          <div className="px-6 py-2 text-xs" style={{ color: C.coral }}>{courseLoadError}</div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">

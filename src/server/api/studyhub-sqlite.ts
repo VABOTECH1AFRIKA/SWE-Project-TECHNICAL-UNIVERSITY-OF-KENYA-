@@ -173,6 +173,27 @@ router.get('/courses', async (_req: Request, res: Response) => {
   res.json(rows);
 });
 
+router.get('/courses/mine', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  if (user.role === 'admin') {
+    const rows = await dataAccess.courses.list();
+    return res.json(rows);
+  }
+
+  const memberships = await dataAccess.courseMemberships.listForUser(user.id);
+  const ownedCourseIds = memberships
+    .map((membership: any) => membership.course_id ?? membership.courseId)
+    .filter(Boolean);
+
+  if (!ownedCourseIds.length) {
+    return res.json([]);
+  }
+
+  const rows = await dataAccess.courses.list();
+  const authorized = rows.filter((course: any) => ownedCourseIds.includes(course.id));
+  return res.json(authorized);
+});
+
 router.get('/courses/:id', async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const row = await dataAccess.courses.getByIdOrCode(id);

@@ -197,6 +197,7 @@ export const api = {
 
   // Courses
   getCourses: () => request<Course[]>('/courses'),
+  getMyCourses: () => request<Course[]>('/courses/mine'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
 
   // Notes
