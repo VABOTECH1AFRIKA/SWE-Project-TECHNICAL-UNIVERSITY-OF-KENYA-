@@ -33,10 +33,21 @@ export function isSupportedContentType(value: string): value is SupportedContent
 }
 
 async function extractPdf(filePath: string): Promise<ExtractedDocument> {
+  const bytes = await readFile(filePath);
+  if (bytes.length < 4 || bytes.subarray(0, 4).toString('ascii') !== '%PDF') {
+    throw new Error('Invalid PDF file: missing PDF header');
+  }
+
   const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: await readFile(filePath) });
+  const parser = new PDFParse({ data: bytes });
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await parser.getText();
+    const parsePromise = parser.getText();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('PDF parsing timed out')), 5000);
+    });
+
+    const result = await Promise.race([parsePromise, timeoutPromise]);
     const pages = (result as any).pages as Array<{ text?: string }> | undefined;
     const sections = pages?.map((page, index) => ({
       text: String(page.text ?? '').trim(),
@@ -46,6 +57,7 @@ async function extractPdf(filePath: string): Promise<ExtractedDocument> {
     if (!text) throw new Error('PDF contains no extractable text');
     return { text, sections };
   } finally {
+    if (timeoutId) clearTimeout(timeoutId);
     await parser.destroy();
   }
 }
