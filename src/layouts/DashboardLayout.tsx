@@ -23,7 +23,6 @@ import {
   Users,
   BookCopy,
   TrendingUp,
-  ChevronDown,
 } from 'lucide-react';
 import { mockUser, mockLecturer, mockNotifications } from '@/lib/mockData';
 import { C, CA } from '@/lib/colors';
@@ -67,12 +66,6 @@ function getNav(role: Role): NavItem[] {
   return studentNav;
 }
 
-const roleSwitcherOptions: { role: Role; label: string; path: string }[] = [
-  { role: 'student', label: 'Student', path: '/dashboard' },
-  { role: 'lecturer', label: 'Lecturer', path: '/lecturer' },
-  { role: 'admin', label: 'Admin', path: '/admin' },
-];
-
 interface DashboardLayoutProps {
   role: Role;
 }
@@ -82,7 +75,6 @@ export default function DashboardLayout({ role }: DashboardLayoutProps) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [searchVal, setSearchVal] = useState('');
 
   const nav = getNav(role);
@@ -286,58 +278,11 @@ export default function DashboardLayout({ role }: DashboardLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {/* Role switcher */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setRoleSwitcherOpen(!roleSwitcherOpen);
-                  setNotifOpen(false);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-background"
-                style={{
-                  border: `1px solid ${C.border}`,
-                  color: C.inkSoft,
-                  background: C.paperRaised,
-                }}
-              >
-                <span className="capitalize">{roleLabel}</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-              {roleSwitcherOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1 w-36 rounded-xl shadow-lg z-50 py-1"
-                  style={{
-                    background: C.paperRaised,
-                    border: `1px solid ${C.border}`,
-                  }}
-                >
-                  {roleSwitcherOptions.map((opt) => (
-                    <button
-                      key={opt.role}
-                      onClick={() => {
-                        navigate(opt.path);
-                        setRoleSwitcherOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm transition-all hover:bg-background"
-                      style={{
-                        color: opt.role === role ? C.teal : C.inkSoft,
-                        background: opt.role === role ? CA.teal10 : 'transparent',
-                        fontWeight: opt.role === role ? 600 : 400,
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Notifications */}
             <div className="relative">
               <button
                 onClick={() => {
                   setNotifOpen(!notifOpen);
-                  setRoleSwitcherOpen(false);
                 }}
                 className="relative p-2 rounded-lg transition-all hover:bg-background"
                 style={{ color: C.inkSoft }}
