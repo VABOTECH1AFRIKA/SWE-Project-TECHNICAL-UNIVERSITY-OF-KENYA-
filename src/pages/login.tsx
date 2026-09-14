@@ -85,11 +85,6 @@ export default function Login() {
               Sign in to continue your learning journey.
             </p>
 
-            {/* Demo credentials hint */}
-            <div className="rounded-xl px-4 py-3 mb-6 text-xs" style={{ background: CA.teal10, color: C.teal }}>
-              <strong>Demo accounts:</strong> student@studyhub.ai / student123 &nbsp;·&nbsp; lecturer@studyhub.ai / lecturer123 &nbsp;·&nbsp; admin@studyhub.ai / admin123
-            </div>
-
             {error && (
               <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4 text-sm" style={{ background: CA.coral10, color: C.coral }}>
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
