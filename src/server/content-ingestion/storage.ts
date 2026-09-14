@@ -9,7 +9,7 @@ export interface StoredObject {
 }
 
 export interface StorageProvider {
-  put(sourcePath: string, key: string, contentType: string): Promise<StoredObject>;
+  put(source: string | Buffer, key: string, contentType: string): Promise<StoredObject>;
   read(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
   metadata(key: string): Promise<{ byteSize: number; contentType?: string } | null>;
@@ -34,12 +34,12 @@ export class LocalPrivateStorage implements StorageProvider {
     return resolved;
   }
 
-  async put(sourcePath: string, key: string, _contentType: string): Promise<StoredObject> {
+  async put(source: string | Buffer, key: string, _contentType: string): Promise<StoredObject> {
     const target = this.resolve(key);
     await mkdir(path.dirname(target), { recursive: true });
-    const source = await readFile(sourcePath);
-    await writeFile(target, source, { flag: 'wx', mode: 0o600 });
-    return { key, byteSize: source.byteLength, private: true };
+    const sourceBytes = typeof source === 'string' ? await readFile(source) : source;
+    await writeFile(target, sourceBytes, { flag: 'wx', mode: 0o600 });
+    return { key, byteSize: sourceBytes.byteLength, private: true };
   }
 
   async read(key: string): Promise<Buffer> {
@@ -66,15 +66,16 @@ export class SupabasePrivateStorage implements StorageProvider {
     private readonly bucket: string,
   ) {}
 
-  async put(sourcePath: string, key: string, contentType: string): Promise<StoredObject> {
+  async put(source: string | Buffer, key: string, contentType: string): Promise<StoredObject> {
     assertStorageKey(key);
-    const { error } = await this.client.storage.from(this.bucket).upload(key, await readFile(sourcePath), {
+    const sourceBytes = typeof source === 'string' ? await readFile(source) : source;
+    const { error } = await this.client.storage.from(this.bucket).upload(key, sourceBytes, {
       contentType,
       upsert: false,
     });
     if (error) throw error;
-    const details = await stat(sourcePath);
-    return { key, byteSize: details.size, private: true };
+    const byteSize = typeof source === 'string' ? (await stat(source)).size : source.length;
+    return { key, byteSize, private: true };
   }
 
   async read(key: string): Promise<Buffer> {

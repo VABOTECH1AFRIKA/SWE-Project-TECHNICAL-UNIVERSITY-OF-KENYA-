@@ -5,6 +5,14 @@ import path from 'node:path';
 import { extractDocument, type SupportedContentType } from './extract.js';
 import { cleanupStorageObject, type StorageProvider } from './storage.js';
 
+async function materializeUploadToTempFile(buffer: Buffer): Promise<string> {
+  const tempDir = path.join(os.tmpdir(), `studyhub-ingestion-${randomUUID()}`);
+  await mkdir(tempDir, { recursive: true });
+  const tempFile = path.join(tempDir, 'upload-source');
+  await writeFile(tempFile, buffer, { mode: 0o600 });
+  return tempFile;
+}
+
 export interface ContentIngestionRepository {
   createProcessingIntent(payload: {
     resourceId: string;
@@ -38,9 +46,10 @@ export async function ingestUploadedFile(input: {
   createdBy: string;
   filename: string;
   mimeType: SupportedContentType;
-  tempFilePath: string;
+  tempFilePath?: string;
+  buffer?: Buffer;
 }): Promise<unknown> {
-  const source = await readFile(input.tempFilePath);
+  const source = input.buffer ? input.buffer : await readFile(input.tempFilePath ?? '');
   const checksum = createHash('sha256').update(source).digest('hex');
   const intent = await input.repository.createProcessingIntent({
     resourceId: input.resourceId,
@@ -55,13 +64,17 @@ export async function ingestUploadedFile(input: {
   const key = storageKey(input.resourceId, intent.versionId, input.filename);
   let stored = false;
   let referencePersisted = false;
+  let tempFilePath = input.tempFilePath;
+  const createdTempFile = input.buffer ? await materializeUploadToTempFile(input.buffer) : undefined;
+  if (createdTempFile) tempFilePath = createdTempFile;
+
   try {
-    await input.storage.put(input.tempFilePath, key, input.mimeType);
+    await input.storage.put(input.buffer ?? input.tempFilePath ?? '', key, input.mimeType);
     stored = true;
     await input.repository.setVersionStorageReference(intent.versionId, key);
     referencePersisted = true;
     await input.repository.startProcessing(intent.versionId);
-    const extracted = await extractDocument(input.tempFilePath, input.mimeType);
+    const extracted = await extractDocument(tempFilePath ?? input.tempFilePath ?? '', input.mimeType);
     return await input.repository.completeProcessing({
       versionId: intent.versionId,
       text: extracted.text,
@@ -71,6 +84,8 @@ export async function ingestUploadedFile(input: {
     await input.repository.failProcessing(intent.versionId, error instanceof Error ? error.message : 'Processing failed');
     if (stored && (!referencePersisted || process.env.RETAIN_FAILED_CONTENT === 'false')) await cleanupStorageObject(input.storage, key);
     throw error;
+  } finally {
+    if (createdTempFile) await rm(path.dirname(createdTempFile), { recursive: true, force: true });
   }
 }
 

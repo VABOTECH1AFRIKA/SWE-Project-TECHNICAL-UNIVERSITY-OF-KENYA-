@@ -6,8 +6,6 @@ import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import multer, { MulterError } from 'multer';
 import { rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import type { TutorRequest } from '../../lib/tutor-contract';
 import { TutorValidationError, tutorOrchestrator, validateTutorRequest } from '../ai/tutor-orchestrator';
 import {
@@ -34,7 +32,7 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const SUPPORTED_TEXT_MIME_TYPES = new Set(['text/plain', 'text/markdown', 'text/x-markdown']);
 const storage = createStorageProvider();
 const upload = multer({
-  dest: path.join(os.tmpdir(), 'studyhub-upload-inbox'),
+  storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
   fileFilter: (_req, file, callback) => isSupportedContentType(file.mimetype) ? callback(null, true) : callback(new Error('Unsupported upload format')),
 });
@@ -441,7 +439,6 @@ router.post('/learning-resources/:id/ingest', requireAuth, requireRole('lecturer
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const resource = await dataAccess.learningResources.getById(id);
   if (!resource) {
-    if (req.file) await rm(req.file.path, { force: true });
     return res.status(404).json({ error: 'Not found' });
   }
 
@@ -452,7 +449,6 @@ router.post('/learning-resources/:id/ingest', requireAuth, requireRole('lecturer
     const filename = req.file.originalname;
     const mimeType = req.file.mimetype;
     if (!isSupportedContentType(mimeType) || !isTextFilenameConsistent(filename, mimeType)) {
-      await rm(req.file.path, { force: true });
       return res.status(400).json({ error: 'Filename is invalid for the supplied content type' });
     }
 
@@ -464,15 +460,13 @@ router.post('/learning-resources/:id/ingest', requireAuth, requireRole('lecturer
         createdBy: req.user?.id ?? 'system',
         filename,
         mimeType: mimeType as SupportedContentType,
-        tempFilePath: req.file.path,
+        buffer: req.file.buffer,
       });
       const processing = await dataAccess.learningResources.getProcessing(id);
       return res.status(201).json(processing);
     } catch {
       const processing = await dataAccess.learningResources.getProcessing(id);
       return res.status(422).json({ error: 'Content processing failed', processing });
-    } finally {
-      await rm(req.file.path, { force: true });
     }
   }
 
