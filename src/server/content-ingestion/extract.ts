@@ -34,9 +34,6 @@ export function isSupportedContentType(value: string): value is SupportedContent
 
 async function extractPdf(filePath: string): Promise<ExtractedDocument> {
   const bytes = await readFile(filePath);
-  if (bytes.length < 4 || bytes.subarray(0, 4).toString('ascii') !== '%PDF') {
-    throw new Error('Invalid PDF file: missing PDF header');
-  }
 
   const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: bytes });
