@@ -3,6 +3,7 @@
  * Usage: npx tsx src/server/db/migrate-and-seed.ts
  */
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import path from 'path';
 import * as schema from './sqlite-schema.js';
 import bcrypt from 'bcryptjs';
@@ -156,6 +157,110 @@ CREATE TABLE IF NOT EXISTS analytics_snapshots (
   radar_data TEXT NOT NULL DEFAULT '[]',
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS course_memberships (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'student',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (user_id, course_id)
+);
+
+CREATE TABLE IF NOT EXISTS learning_resources (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  resource_type TEXT NOT NULL DEFAULT 'document',
+  owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  visibility TEXT NOT NULL DEFAULT 'course',
+  status TEXT NOT NULL DEFAULT 'draft',
+  current_version_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS content_versions (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL REFERENCES learning_resources(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  checksum TEXT,
+  mime_type TEXT,
+  byte_size INTEGER,
+  storage_reference TEXT,
+  extraction_status TEXT NOT NULL DEFAULT 'not_started',
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  superseded_at TEXT,
+  published_at TEXT,
+  UNIQUE (resource_id, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS content_processing_jobs (
+  id TEXT PRIMARY KEY,
+  version_id TEXT NOT NULL REFERENCES content_versions(id) ON DELETE CASCADE,
+  job_type TEXT NOT NULL DEFAULT 'text_extraction',
+  status TEXT NOT NULL DEFAULT 'queued',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  next_attempt_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS content_chunks (
+  id TEXT PRIMARY KEY,
+  version_id TEXT NOT NULL REFERENCES content_versions(id) ON DELETE CASCADE,
+  ordinal INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  token_count INTEGER NOT NULL DEFAULT 0,
+  page_number INTEGER DEFAULT 1,
+  heading_path TEXT NOT NULL DEFAULT '',
+  char_start INTEGER DEFAULT 0,
+  char_end INTEGER DEFAULT 0,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (version_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS tutor_conversations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+  topic TEXT,
+  title TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tutor_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES tutor_conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  mode TEXT,
+  grounding_status TEXT,
+  UNIQUE (conversation_id, sequence)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_memberships_user_status ON course_memberships(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_course_memberships_course_status ON course_memberships(course_id, status);
+CREATE INDEX IF NOT EXISTS idx_learning_resources_course_status ON learning_resources(course_id, status);
+CREATE INDEX IF NOT EXISTS idx_learning_resources_creator ON learning_resources(created_by);
+CREATE INDEX IF NOT EXISTS idx_content_versions_resource_version ON content_versions(resource_id, version_number DESC);
+CREATE INDEX IF NOT EXISTS idx_content_processing_jobs_version ON content_processing_jobs(version_id);
+CREATE INDEX IF NOT EXISTS idx_content_chunks_version_ordinal ON content_chunks(version_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_tutor_conversations_user_updated ON tutor_conversations(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tutor_messages_conversation_sequence ON tutor_messages(conversation_id, sequence);
 `);
 
 console.log('✅ Tables created');
@@ -196,6 +301,22 @@ const courseData = [
   { id: 'cs304', code: 'CS304', title: 'Computer Networks', color: '#FFC94A', progress: 63, notesCount: 10, assignmentsCount: 3, icon: 'Network', lecturer: 'Prof. Michael Brown' },
 ];
 courseData.forEach(upsertCourse);
+
+const courseMembershipData = [
+  { userId: 'u1', courseId: 'cs301', role: 'student', status: 'active' },
+  { userId: 'u1', courseId: 'cs302', role: 'student', status: 'active' },
+  { userId: 'u2', courseId: 'cs301', role: 'lecturer', status: 'active' },
+  { userId: 'u2', courseId: 'cs302', role: 'lecturer', status: 'active' },
+  { userId: 'u3', courseId: 'cs301', role: 'admin', status: 'active' },
+  { userId: 'u3', courseId: 'cs302', role: 'admin', status: 'active' },
+  { userId: 'u4', courseId: 'cs302', role: 'student', status: 'active' },
+];
+
+courseMembershipData.forEach((membership) => {
+  sqlite.prepare(`INSERT INTO course_memberships (id,user_id,course_id,role,status,created_at,updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now')) ON CONFLICT(user_id, course_id) DO NOTHING`)
+    .run(`cm${randomUUID().slice(0, 8)}`, membership.userId, membership.courseId, membership.role, membership.status);
+});
 console.log('✅ Courses seeded');
 
 // ── Seed notes ────────────────────────────────────────────────────────────────

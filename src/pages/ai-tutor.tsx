@@ -2,14 +2,18 @@ import { ai_tutor } from 'virtual:content';
 import { useState, useRef, useEffect } from 'react';
 import { Helmet } from '@dr.pogodin/react-helmet';
 import { Brain, Send, Paperclip, ChevronDown } from 'lucide-react';
-import { mockAITutorMessages, mockCourses } from '@/lib/mockData';
+import { mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors } from '@/lib/colors';
+import { api } from '@/lib/api';
+import type { TutorCitation, TutorMode } from '@/lib/tutor-contract';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  citations?: TutorCitation[];
+  groundingStatus?: string;
 }
 
 function renderContent(text: string) {
@@ -21,19 +25,25 @@ function renderContent(text: string) {
 }
 
 export default function AiTutor() {
-  const [messages, setMessages] = useState<Message[]>(mockAITutorMessages as Message[]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
+  const [error, setError] = useState('');
+  const [conversationId, setConversationId] = useState<string>();
   const [selectedCourse, setSelectedCourse] = useState(mockCourses[0].id);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const course = mockCourses.find((c) => c.id === selectedCourse) || mockCourses[0];
 
   useEffect(() => {
+    setConversationId(undefined);
+  }, [selectedCourse]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typing]);
 
-  const sendMessage = (text: string) => {
+  const sendMessage = async (text: string) => {
     if (!text.trim()) return;
     const userMsg: Message = {
       id: `u${Date.now()}`,
@@ -44,16 +54,24 @@ export default function AiTutor() {
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setTyping(true);
-    setTimeout(() => {
+    setError('');
+    try {
+      const response = await api.tutor({ message: text, courseId: selectedCourse, conversationId, mode: 'explain' as TutorMode });
+      setConversationId(response.conversationId);
       setTyping(false);
       const aiMsg: Message = {
         id: `a${Date.now()}`,
         role: 'assistant',
-        content: `That's a great question about **${course.title}**! This is a placeholder response — the AI backend integration is pending. Once connected, I'll provide detailed, contextual answers based on your course materials for ${course.code}.`,
+        content: response.answer,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        citations: response.citations,
+        groundingStatus: response.groundingStatus,
       };
       setMessages((prev) => [...prev, aiMsg]);
-    }, 1800);
+    } catch {
+      setTyping(false);
+      setError('The Tutor is unavailable right now. Please try again.');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -91,7 +109,7 @@ export default function AiTutor() {
                 AI Tutor
               </h1>
               <p className="text-xs" style={{ color: C.coral }}>
-                Placeholder — AI backend pending
+                Grounded course support
               </p>
             </div>
           </div>
@@ -156,6 +174,16 @@ export default function AiTutor() {
                 }
               >
                 {renderContent(msg.content)}
+                {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                  <div className="mt-2 pt-2 text-xs" style={{ borderTop: `1px solid ${C.border}`, color: C.inkSoft }}>
+                    {msg.citations.map((citation) => (
+                      <div key={citation.sourceId}>Source: {citation.title ?? citation.sourceId}{citation.locator ? ` · ${citation.locator}` : ''}</div>
+                    ))}
+                  </div>
+                )}
+                {msg.role === 'assistant' && msg.groundingStatus === 'insufficient_sources' && (
+                  <p className="mt-2 text-xs" style={{ color: C.coral }}>Insufficient authorized course material was found for a reliable citation.</p>
+                )}
                 <p
                   className="text-xs mt-1.5 opacity-60"
                   style={{ color: msg.role === 'user' ? 'white' : C.inkSoft }}
@@ -194,6 +222,8 @@ export default function AiTutor() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {error && <div className="px-6 py-2 text-xs" style={{ color: C.coral }}>{error}</div>}
 
         {/* Suggested questions */}
         <div

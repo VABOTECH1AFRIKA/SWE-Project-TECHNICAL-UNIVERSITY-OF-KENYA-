@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Helmet } from '@dr.pogodin/react-helmet';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Users, BookOpen, Settings, Search, MoreHorizontal, Brain } from 'lucide-react';
+import { Shield, Users, BookOpen, Settings, Search, MoreHorizontal, Brain, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import { mockAdminStats, mockAdminUsers, mockCourses } from '@/lib/mockData';
 import { C, CA, courseColors, courseColorAlpha } from '@/lib/colors';
@@ -21,14 +21,25 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [userSearch, setUserSearch] = useState('');
+  const [uploadResourceId, setUploadResourceId] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const { data: adminStats = mockAdminStats } = useQuery({ queryKey: ['admin-stats'], queryFn: api.getAdminStats });
   const { data: adminUsers = mockAdminUsers } = useQuery({ queryKey: ['admin-users', userSearch], queryFn: () => api.getAdminUsers(userSearch || undefined) });
   const { data: courses = mockCourses } = useQuery({ queryKey: ['courses'], queryFn: api.getCourses });
+  const { data: resources = [] } = useQuery({ queryKey: ['learning-resources'], queryFn: () => api.getLearningResources() });
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.updateUserStatus(id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => api.uploadLearningResource(id, file),
+    onSuccess: () => {
+      setUploadFile(null);
+      qc.invalidateQueries({ queryKey: ['learning-resources'] });
+    },
   });
 
   const activeTab: TabId =
@@ -215,34 +226,59 @@ export default function AdminDashboard() {
             className="rounded-xl overflow-hidden"
             style={{ border: `1px solid ${C.border}` }}
           >
-            {courses.map((course, i) => (
-              <div
-                key={course.id}
-                className="flex items-center gap-4 px-5 py-4 transition-all hover:bg-background"
-                style={{
-                  background: C.paperRaised,
-                  borderBottom: i < courses.length - 1 ? `1px solid ${C.border}` : 'none',
-                }}
-              >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: courseColorAlpha[course.code] }}
-                >
-                  <BookOpen className="w-5 h-5" style={{ color: courseColors[course.code] }} />
+            <div className="p-5" style={{ background: C.paperRaised, borderBottom: `1px solid ${C.border}` }}>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[220px] flex-1">
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: C.inkSoft }} htmlFor="admin-resource-upload">Upload to resource</label>
+                  <select id="admin-resource-upload" value={uploadResourceId} onChange={(e) => setUploadResourceId(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ background: C.paper, border: `1px solid ${C.border}`, color: C.ink }}>
+                    <option value="">Choose a resource</option>
+                    {resources.map((resource) => <option key={resource.id} value={resource.id}>{resource.title}</option>)}
+                  </select>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold" style={{ color: C.ink }}>
-                    {course.code} — {course.title}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: C.inkSoft }}>
-                    {course.lecturer} · {course.notesCount} notes
-                  </p>
-                </div>
-                <button className="p-2 rounded-lg transition-all hover:bg-background" style={{ color: C.inkSoft }}>
-                  <MoreHorizontal className="w-4 h-4" />
+                <input type="file" accept=".txt,.md,.markdown,.pdf,.docx,.pptx" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} className="text-xs" />
+                <button className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" style={{ background: C.teal, color: 'white' }} disabled={!uploadResourceId || !uploadFile || uploadMutation.isPending} onClick={() => uploadFile && uploadMutation.mutate({ id: uploadResourceId, file: uploadFile })}>
+                  <Upload className="w-4 h-4" />
+                  {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
                 </button>
               </div>
-            ))}
+              {uploadMutation.isSuccess && <p className="text-xs mt-2" style={{ color: C.sage }}>Upload complete. Processing status is available on the resource.</p>}
+            </div>
+            {courses.map((course, i) => {
+              const courseResources = resources.filter((resource) => resource.courseId === course.id);
+              return (
+                <div
+                  key={course.id}
+                  className="flex items-center gap-4 px-5 py-4 transition-all hover:bg-background"
+                  style={{
+                    background: C.paperRaised,
+                    borderBottom: i < courses.length - 1 ? `1px solid ${C.border}` : 'none',
+                  }}
+                >
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: courseColorAlpha[course.code] }}
+                  >
+                    <BookOpen className="w-5 h-5" style={{ color: courseColors[course.code] }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: C.ink }}>
+                      {course.code} — {course.title}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: C.inkSoft }}>
+                      {course.lecturer} · {course.notesCount} notes · {courseResources.length} resource entries
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-1 rounded-full" style={{ background: CA.teal10, color: C.teal }}>
+                      {courseResources.filter((r) => r.status === 'published').length} published
+                    </span>
+                    <button className="p-2 rounded-lg transition-all hover:bg-background" style={{ color: C.inkSoft }}>
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 

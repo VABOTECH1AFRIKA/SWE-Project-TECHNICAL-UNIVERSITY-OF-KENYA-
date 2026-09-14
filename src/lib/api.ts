@@ -7,6 +7,8 @@
  * data layer so the UI keeps working.
  */
 
+import type { TutorRequest, TutorResponse } from './tutor-contract';
+
 const BASE = '/api';
 
 async function request<T>(
@@ -106,6 +108,75 @@ export interface AdminUser {
   status: string; joined: string; avatar: string;
 }
 
+export interface LearningResource {
+  id: string;
+  courseId: string;
+  courseCode?: string;
+  courseTitle?: string;
+  title: string;
+  resourceType: string;
+  ownerUserId?: string | null;
+  ownerName?: string;
+  createdBy: string;
+  visibility: string;
+  status: string;
+  currentVersionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string | null;
+}
+
+export interface LearningResourceVersion {
+  id: string;
+  resourceId: string;
+  versionNumber: number;
+  checksum?: string | null;
+  mimeType?: string | null;
+  byteSize?: number | null;
+  storageReference?: string | null;
+  extractionStatus: string;
+  createdBy: string;
+  createdAt: string;
+  supersededAt?: string | null;
+  publishedAt?: string | null;
+}
+
+export interface LearningResourceChunk {
+  id: string;
+  versionId: string;
+  ordinal: number;
+  text: string;
+  tokenCount: number;
+  pageNumber: number;
+  headingPath: string;
+  charStart: number;
+  charEnd: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface LearningResourceIngestResult {
+  version: LearningResourceVersion;
+  processingJob: {
+    id: string;
+    versionId: string;
+    jobType: string;
+    status: string;
+    attemptCount: number;
+    lastError?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    nextAttemptAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  chunks: LearningResourceChunk[];
+}
+
+export interface LearningResourceProcessing {
+  version: LearningResourceVersion;
+  processingJob: LearningResourceIngestResult['processingJob'];
+}
+
 export interface User {
   id: string; name: string; email: string; avatar: string;
   role: string; streak?: number; program?: string; year?: number;
@@ -120,6 +191,10 @@ export interface AuthResponse {
 // ── API Methods ────────────────────────────────────────────────────────────
 
 export const api = {
+  // Tutor
+  tutor: (data: TutorRequest) =>
+    request<TutorResponse>('/ai/tutor', { method: 'POST', body: JSON.stringify(data) }),
+
   // Courses
   getCourses: () => request<Course[]>('/courses'),
   getCourse: (id: string) => request<Course>(`/courses/${id}`),
@@ -168,6 +243,30 @@ export const api = {
   getNotifications: () => request<Notification[]>('/notifications'),
   markNotificationRead: (id: string) =>
     request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
+
+  // Learning resources
+  getLearningResources: (courseId?: string) =>
+    request<LearningResource[]>(courseId ? `/learning-resources?course=${encodeURIComponent(courseId)}` : '/learning-resources'),
+  getLearningResource: (id: string) => request<LearningResource>(`/learning-resources/${id}`),
+  getLearningResourceVersions: (id: string) => request<LearningResourceVersion[]>(`/learning-resources/${id}/versions`),
+  getLearningResourceProcessing: (id: string) => request<LearningResourceProcessing>(`/learning-resources/${id}/processing`),
+  uploadLearningResource: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const response = await fetch(`${BASE}/learning-resources/${id}/ingest`, { method: 'POST', body: form, credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`API ${response.status}: ${await response.text().catch(() => '')}`);
+    return response.json() as Promise<LearningResourceProcessing>;
+  },
+  retryLearningResourceProcessing: (id: string) =>
+    request<LearningResourceProcessing>(`/learning-resources/${id}/retry-processing`, { method: 'POST', body: JSON.stringify({}) }),
+  ingestLearningResource: (id: string, payload: { mimeType?: string; filename?: string; content: string }) =>
+    request<LearningResourceIngestResult>(`/learning-resources/${id}/ingest`, { method: 'POST', body: JSON.stringify(payload) }),
+  createLearningResource: (payload: {
+    courseId: string; title: string; resourceType?: string; ownerUserId?: string | null; visibility?: string; status?: string;
+  }) => request<LearningResource>('/learning-resources', { method: 'POST', body: JSON.stringify(payload) }),
+  updateLearningResource: (id: string, payload: Partial<{
+    title: string; courseId: string; resourceType: string; ownerUserId: string | null; visibility: string; status: string; currentVersionId: string | null;
+  }>) => request<LearningResource>(`/learning-resources/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 
   // Admin
   getAdminStats: () => request<AdminStats>('/admin/stats'),
