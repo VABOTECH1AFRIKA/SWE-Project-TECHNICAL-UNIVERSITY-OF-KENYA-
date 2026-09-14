@@ -91,20 +91,21 @@ export async function searchKnowledge(input: Omit<RetrievalRequest, 'userId' | '
     && (!resourceId || resource.id === resourceId),
   );
 
-  const versionIds: string[] = [];
   const resourceByVersion = new Map<string, any>();
-  for (const resource of eligibleResources) {
+  const versionMatches = await Promise.all(eligibleResources.map(async (resource: any) => {
     const versions = await dataAccess.learningResources.listVersions(resource.id);
     const current = versions.find((version: any) =>
       version.id === resource.currentVersionId
       && version.extractionStatus === 'completed'
       && !version.supersededAt,
     );
-    if (current) {
-      versionIds.push(current.id);
-      resourceByVersion.set(current.id, resource);
-    }
-  }
+    return current ? { resource, version: current } : null;
+  }));
+
+  const versionIds = versionMatches.filter(Boolean).map((match: any) => {
+    resourceByVersion.set(match.version.id, match.resource);
+    return match.version.id;
+  });
 
   if (versionIds.length === 0) return { query, results: [], hasSufficientEvidence: false };
 

@@ -8062,7 +8062,6 @@ import {
   Users,
   BookCopy,
   TrendingUp,
-  ChevronDown,
 } from 'lucide-react';
 import { mockUser, mockLecturer, mockNotifications } from '@/lib/mockData';
 import { C, CA } from '@/lib/colors';
@@ -8106,12 +8105,6 @@ function getNav(role: Role): NavItem[] {
   return studentNav;
 }
 
-const roleSwitcherOptions: { role: Role; label: string; path: string }[] = [
-  { role: 'student', label: 'Student', path: '/dashboard' },
-  { role: 'lecturer', label: 'Lecturer', path: '/lecturer' },
-  { role: 'admin', label: 'Admin', path: '/admin' },
-];
-
 interface DashboardLayoutProps {
   role: Role;
 }
@@ -8121,7 +8114,6 @@ export default function DashboardLayout({ role }: DashboardLayoutProps) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [searchVal, setSearchVal] = useState('');
 
   const nav = getNav(role);
@@ -8325,58 +8317,11 @@ export default function DashboardLayout({ role }: DashboardLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {/* Role switcher */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setRoleSwitcherOpen(!roleSwitcherOpen);
-                  setNotifOpen(false);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-background"
-                style={{
-                  border: `1px solid ${C.border}`,
-                  color: C.inkSoft,
-                  background: C.paperRaised,
-                }}
-              >
-                <span className="capitalize">{roleLabel}</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-              {roleSwitcherOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1 w-36 rounded-xl shadow-lg z-50 py-1"
-                  style={{
-                    background: C.paperRaised,
-                    border: `1px solid ${C.border}`,
-                  }}
-                >
-                  {roleSwitcherOptions.map((opt) => (
-                    <button
-                      key={opt.role}
-                      onClick={() => {
-                        navigate(opt.path);
-                        setRoleSwitcherOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm transition-all hover:bg-background"
-                      style={{
-                        color: opt.role === role ? C.teal : C.inkSoft,
-                        background: opt.role === role ? CA.teal10 : 'transparent',
-                        fontWeight: opt.role === role ? 600 : 400,
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Notifications */}
             <div className="relative">
               <button
                 onClick={() => {
                   setNotifOpen(!notifOpen);
-                  setRoleSwitcherOpen(false);
                 }}
                 className="relative p-2 rounded-lg transition-all hover:bg-background"
                 style={{ color: C.inkSoft }}
@@ -11599,11 +11544,11 @@ export default function AiTutor() {
         setCourses(rows);
         setSelectedCourse(rows[0]?.id ?? '');
         setCourseLoadError('');
-      } catch {
+      } catch (loadError) {
         if (cancelled) return;
         setCourses([]);
         setSelectedCourse('');
-        setCourseLoadError('You do not have any authorized courses yet.');
+        setCourseLoadError(loadError instanceof Error ? loadError.message : 'Unable to load your authorized courses.');
       } finally {
         if (!cancelled) setLoadingCourses(false);
       }
@@ -11650,9 +11595,9 @@ export default function AiTutor() {
         groundingStatus: response.groundingStatus,
       };
       setMessages((prev) => [...prev, aiMsg]);
-    } catch {
+    } catch (requestError) {
       setTyping(false);
-      setError('The Tutor is unavailable right now. Please try again.');
+      setError(requestError instanceof Error ? requestError.message : 'The Tutor is unavailable right now. Please try again.');
     }
   };
 
@@ -14018,7 +13963,6 @@ export default function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message.includes('API ') ? message.replace(/^API \d+:\s*/, '') : message);
-      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -15952,6 +15896,18 @@ export interface TutorContextProvider {
   getContext(context: Pick<TutorExecutionContext, 'user' | 'request'>): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>>;
 }
 
+function formatLearnerContext(user: any): string[] {
+  if (!user) return [];
+  return [
+    `Student: ${user.name ?? 'Unknown'}`,
+    `Role: ${user.role ?? 'student'}`,
+    user.program ? `Program: ${user.program}` : '',
+    user.year ? `Year: ${user.year}` : '',
+    user.department ? `Department: ${user.department}` : '',
+    user.streak !== undefined ? `Study streak: ${user.streak} days` : '',
+  ].filter(Boolean);
+}
+
 export class EmptyTutorContextProvider implements TutorContextProvider {
   async getContext(): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>> {
     return { learnerContext: [], courseContext: [], sources: [] };
@@ -15960,14 +15916,20 @@ export class EmptyTutorContextProvider implements TutorContextProvider {
 
 export class RetrievalTutorContextProvider implements TutorContextProvider {
   async getContext(context: Pick<TutorExecutionContext, 'user' | 'request'>): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>> {
-    const retrieval = await searchKnowledge({
-      userId: context.user.id,
-      role: context.user.role as 'student' | 'lecturer' | 'admin',
-      query: context.request.message,
-      courseId: context.request.courseId,
-      topic: context.request.topic,
-      maxResults: 8,
-    });
+    const [user, retrieval, history] = await Promise.all([
+      dataAccess.users.getById(context.user.id),
+      searchKnowledge({
+        userId: context.user.id,
+        role: context.user.role as 'student' | 'lecturer' | 'admin',
+        query: context.request.message,
+        courseId: context.request.courseId,
+        topic: context.request.topic,
+        maxResults: 8,
+      }),
+      context.request.conversationId
+        ? dataAccess.tutor.listMessages(context.request.conversationId, context.user.id, 12)
+        : Promise.resolve([]),
+    ]);
 
     const sources: TutorCitation[] = retrieval.results.map((result) => ({
       sourceId: result.chunkId,
@@ -15979,12 +15941,8 @@ export class RetrievalTutorContextProvider implements TutorContextProvider {
       ].filter(Boolean).join(' / ') || undefined,
     }));
 
-    const history = context.request.conversationId
-      ? await dataAccess.tutor.listMessages(context.request.conversationId, context.user.id, 12)
-      : [];
-
     return {
-      learnerContext: history.map((message: any) => `${message.role}: ${message.content}`),
+      learnerContext: [...formatLearnerContext(user), ...history.map((message: any) => `${message.role}: ${message.content}`)],
       courseContext: retrieval.results.map((result) => `[${result.chunkId}] ${result.title}: ${result.text}`),
       sources,
     };
@@ -16651,7 +16609,6 @@ FILE: D:\PROJECTS\StudyHub_AI\StudyHub_AI\src\server\api\studyhub-sqlite.ts
 import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import multer, { MulterError } from 'multer';
-import { rm } from 'node:fs/promises';
 import type { TutorRequest } from '../../lib/tutor-contract';
 import { TutorValidationError, tutorOrchestrator, validateTutorRequest } from '../ai/tutor-orchestrator';
 import {
@@ -16781,10 +16738,19 @@ router.post('/ai/tutor', requireAuth, async (req: AuthenticatedRequest, res: Res
       return;
     }
 
+    const errorCode = error instanceof Error && error.name === 'TutorOrchestrationError'
+      ? 'TUTOR_PROVIDER_OR_RETRIEVAL_FAILED'
+      : 'TUTOR_REQUEST_FAILED';
+    console.error(JSON.stringify({
+      event: 'ai_tutor_request_failed',
+      errorCode,
+      userId: req.user?.id,
+      courseId: req.body?.courseId,
+    }));
     res.status(500).json({
       error: {
-        code: 'TUTOR_ERROR',
-        message: 'Tutor service is unavailable.',
+        code: errorCode,
+        message: 'Tutor service is unavailable. Check the provider and course content configuration.',
       },
     });
   }
@@ -16824,7 +16790,10 @@ router.get('/courses/mine', requireAuth, async (req: AuthenticatedRequest, res: 
     return res.json(rows);
   }
 
-  const memberships = await dataAccess.courseMemberships.listForUser(user.id);
+  const [memberships, rows] = await Promise.all([
+    dataAccess.courseMemberships.listForUser(user.id),
+    dataAccess.courses.list(),
+  ]);
   const ownedCourseIds = memberships
     .map((membership: any) => membership.course_id ?? membership.courseId)
     .filter(Boolean);
@@ -16833,7 +16802,6 @@ router.get('/courses/mine', requireAuth, async (req: AuthenticatedRequest, res: 
     return res.json([]);
   }
 
-  const rows = await dataAccess.courses.list();
   const authorized = rows.filter((course: any) => ownedCourseIds.includes(course.id));
   return res.json(authorized);
 });
@@ -22660,20 +22628,21 @@ export async function searchKnowledge(input: Omit<RetrievalRequest, 'userId' | '
     && (!resourceId || resource.id === resourceId),
   );
 
-  const versionIds: string[] = [];
   const resourceByVersion = new Map<string, any>();
-  for (const resource of eligibleResources) {
+  const versionMatches = await Promise.all(eligibleResources.map(async (resource: any) => {
     const versions = await dataAccess.learningResources.listVersions(resource.id);
     const current = versions.find((version: any) =>
       version.id === resource.currentVersionId
       && version.extractionStatus === 'completed'
       && !version.supersededAt,
     );
-    if (current) {
-      versionIds.push(current.id);
-      resourceByVersion.set(current.id, resource);
-    }
-  }
+    return current ? { resource, version: current } : null;
+  }));
+
+  const versionIds = versionMatches.filter(Boolean).map((match: any) => {
+    resourceByVersion.set(match.version.id, match.resource);
+    return match.version.id;
+  });
 
   if (versionIds.length === 0) return { query, results: [], hasSufficientEvidence: false };
 
@@ -23772,7 +23741,12 @@ describe('Tutor API contract', () => {
         }, cookie);
 
         expect(response.response.status).toBe(500);
-        expect(response.body).toEqual({ error: { code: 'TUTOR_ERROR', message: 'Tutor service is unavailable.' } });
+        expect(response.body).toEqual({
+          error: {
+            code: 'TUTOR_REQUEST_FAILED',
+            message: 'Tutor service is unavailable. Check the provider and course content configuration.',
+          },
+        });
         expect(JSON.stringify(response.body)).not.toContain('private provider detail');
       });
     } finally {

@@ -46,11 +46,11 @@ export default function AiTutor() {
         setCourses(rows);
         setSelectedCourse(rows[0]?.id ?? '');
         setCourseLoadError('');
-      } catch {
+      } catch (loadError) {
         if (cancelled) return;
         setCourses([]);
         setSelectedCourse('');
-        setCourseLoadError('You do not have any authorized courses yet.');
+        setCourseLoadError(loadError instanceof Error ? loadError.message : 'Unable to load your authorized courses.');
       } finally {
         if (!cancelled) setLoadingCourses(false);
       }
@@ -97,9 +97,9 @@ export default function AiTutor() {
         groundingStatus: response.groundingStatus,
       };
       setMessages((prev) => [...prev, aiMsg]);
-    } catch {
+    } catch (requestError) {
       setTyping(false);
-      setError('The Tutor is unavailable right now. Please try again.');
+      setError(requestError instanceof Error ? requestError.message : 'The Tutor is unavailable right now. Please try again.');
     }
   };
 

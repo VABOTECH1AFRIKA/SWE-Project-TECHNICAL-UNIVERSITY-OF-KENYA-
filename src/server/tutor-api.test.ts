@@ -151,7 +151,12 @@ describe('Tutor API contract', () => {
         }, cookie);
 
         expect(response.response.status).toBe(500);
-        expect(response.body).toEqual({ error: { code: 'TUTOR_ERROR', message: 'Tutor service is unavailable.' } });
+        expect(response.body).toEqual({
+          error: {
+            code: 'TUTOR_REQUEST_FAILED',
+            message: 'Tutor service is unavailable. Check the provider and course content configuration.',
+          },
+        });
         expect(JSON.stringify(response.body)).not.toContain('private provider detail');
       });
     } finally {

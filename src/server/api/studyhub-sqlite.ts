@@ -134,10 +134,19 @@ router.post('/ai/tutor', requireAuth, async (req: AuthenticatedRequest, res: Res
       return;
     }
 
+    const errorCode = error instanceof Error && error.name === 'TutorOrchestrationError'
+      ? 'TUTOR_PROVIDER_OR_RETRIEVAL_FAILED'
+      : 'TUTOR_REQUEST_FAILED';
+    console.error(JSON.stringify({
+      event: 'ai_tutor_request_failed',
+      errorCode,
+      userId: req.user?.id,
+      courseId: req.body?.courseId,
+    }));
     res.status(500).json({
       error: {
-        code: 'TUTOR_ERROR',
-        message: 'Tutor service is unavailable.',
+        code: errorCode,
+        message: 'Tutor service is unavailable. Check the provider and course content configuration.',
       },
     });
   }
@@ -177,7 +186,10 @@ router.get('/courses/mine', requireAuth, async (req: AuthenticatedRequest, res: 
     return res.json(rows);
   }
 
-  const memberships = await dataAccess.courseMemberships.listForUser(user.id);
+  const [memberships, rows] = await Promise.all([
+    dataAccess.courseMemberships.listForUser(user.id),
+    dataAccess.courses.list(),
+  ]);
   const ownedCourseIds = memberships
     .map((membership: any) => membership.course_id ?? membership.courseId)
     .filter(Boolean);
@@ -186,7 +198,6 @@ router.get('/courses/mine', requireAuth, async (req: AuthenticatedRequest, res: 
     return res.json([]);
   }
 
-  const rows = await dataAccess.courses.list();
   const authorized = rows.filter((course: any) => ownedCourseIds.includes(course.id));
   return res.json(authorized);
 });

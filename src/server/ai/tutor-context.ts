@@ -19,6 +19,18 @@ export interface TutorContextProvider {
   getContext(context: Pick<TutorExecutionContext, 'user' | 'request'>): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>>;
 }
 
+function formatLearnerContext(user: any): string[] {
+  if (!user) return [];
+  return [
+    `Student: ${user.name ?? 'Unknown'}`,
+    `Role: ${user.role ?? 'student'}`,
+    user.program ? `Program: ${user.program}` : '',
+    user.year ? `Year: ${user.year}` : '',
+    user.department ? `Department: ${user.department}` : '',
+    user.streak !== undefined ? `Study streak: ${user.streak} days` : '',
+  ].filter(Boolean);
+}
+
 export class EmptyTutorContextProvider implements TutorContextProvider {
   async getContext(): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>> {
     return { learnerContext: [], courseContext: [], sources: [] };
@@ -27,14 +39,20 @@ export class EmptyTutorContextProvider implements TutorContextProvider {
 
 export class RetrievalTutorContextProvider implements TutorContextProvider {
   async getContext(context: Pick<TutorExecutionContext, 'user' | 'request'>): Promise<Pick<TutorExecutionContext, 'learnerContext' | 'courseContext' | 'sources'>> {
-    const retrieval = await searchKnowledge({
-      userId: context.user.id,
-      role: context.user.role as 'student' | 'lecturer' | 'admin',
-      query: context.request.message,
-      courseId: context.request.courseId,
-      topic: context.request.topic,
-      maxResults: 8,
-    });
+    const [user, retrieval, history] = await Promise.all([
+      dataAccess.users.getById(context.user.id),
+      searchKnowledge({
+        userId: context.user.id,
+        role: context.user.role as 'student' | 'lecturer' | 'admin',
+        query: context.request.message,
+        courseId: context.request.courseId,
+        topic: context.request.topic,
+        maxResults: 8,
+      }),
+      context.request.conversationId
+        ? dataAccess.tutor.listMessages(context.request.conversationId, context.user.id, 12)
+        : Promise.resolve([]),
+    ]);
 
     const sources: TutorCitation[] = retrieval.results.map((result) => ({
       sourceId: result.chunkId,
@@ -46,12 +64,8 @@ export class RetrievalTutorContextProvider implements TutorContextProvider {
       ].filter(Boolean).join(' / ') || undefined,
     }));
 
-    const history = context.request.conversationId
-      ? await dataAccess.tutor.listMessages(context.request.conversationId, context.user.id, 12)
-      : [];
-
     return {
-      learnerContext: history.map((message: any) => `${message.role}: ${message.content}`),
+      learnerContext: [...formatLearnerContext(user), ...history.map((message: any) => `${message.role}: ${message.content}`)],
       courseContext: retrieval.results.map((result) => `[${result.chunkId}] ${result.title}: ${result.text}`),
       sources,
     };
